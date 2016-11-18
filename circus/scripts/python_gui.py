@@ -65,12 +65,12 @@ def main(argv=None):
         print_and_log(["File format %s is not supported by phy. TraceView disabled" %file_format], 'info', logger)
 
     if numpy.iterable(data_file.gain):
-        print_and_log(['Multiple gains are not supported, using a default value of 1'], 'info', logger)
         gain = 1
+        print_and_log(['Multiple gains are not supported, using a default value of %g' %gain], 'info', logger)
     else:
         if data_file.gain != 1:
-            print_and_log(["Gain of %g is not supported by phy. Expecting a scaling mismatch" %gain], 'info', logger)
             gain = data_file.gain
+            print_and_log(["Gain of %g is not supported by phy. Expecting a scaling mismatch" %gain], 'info', logger)
 
 
     probe          = params.probe

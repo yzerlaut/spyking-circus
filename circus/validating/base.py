@@ -42,16 +42,16 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     N_total        = params.nb_channels
     sampling_rate  = params.rate
 
-    template_shift = params.getint('detection', 'template_shift')
-    file_out_suff = params.get('data', 'file_out_suff')
-    nb_repeats = params.getint('clustering', 'nb_repeats')
-    max_iter = params.getint('validating', 'max_iter')
+    template_shift     = params.getint('detection', 'template_shift')
+    file_out_suff      = params.get('data', 'file_out_suff')
+    nb_repeats         = params.getint('clustering', 'nb_repeats')
+    max_iter           = params.getint('validating', 'max_iter')
     learning_rate_init = params.getfloat('validating', 'learning_rate')
-    make_plots = params.get('validating', 'make_plots')
-    roc_sampling = params.getint('validating', 'roc_sampling')
-    plot_path = os.path.join(params.get('data', 'data_file_noext'), 'plots')
-    test_size = params.getfloat('validating', 'test_size')
-    matching_jitter = params.getfloat('validating', 'matching_jitter')
+    make_plots         = params.get('validating', 'make_plots')
+    roc_sampling       = params.getint('validating', 'roc_sampling')
+    plot_path          = os.path.join(params.get('data', 'data_file_noext'), 'plots')
+    test_size          = params.getfloat('validating', 'test_size')
+    matching_jitter    = params.getfloat('validating', 'matching_jitter')
     
     verbose   = False
     skip_demo = False
@@ -89,7 +89,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
 
     if len(beer_file.get(key)) == 0:
         if comm.rank == 0:
-            print_and_log(['No juxta-cellular spikes have been found!'], 'error', logger)
+            print_and_log(['No juxtacellular spikes have been found!'], 'error', logger)
         sys.exit(1)
     beer_file.close()
     
@@ -135,6 +135,32 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             fig.text(0.02, 0.02, "median absolute deviation: {:.2f}".format(juxta_mad))
             pylab.savefig(path)
             pylab.close()
+        
+        if make_plots not in ['None', '']:
+            # Plot juxtacellular spikes
+            sampling_rate  = params.getint('data', 'sampling_rate')
+            template_shift = params.getint('detection', 'template_shift')
+            time_min = - float(template_shift) / float(sampling_rate)
+            time_max = float(template_shift) / float(sampling_rate)
+            time_num = 2 * template_shift + 1
+            time = numpy.linspace(time_min, time_max, num=time_num)
+            juxta_spikes = get_juxta_stas(params, spike_times_juxta)
+            plot_filename = "beer-juxta-spikes.{}".format(make_plots)
+            path = os.path.join(plot_path, plot_filename)
+            import pylab
+            fig = pylab.figure()
+            ax = fig.add_subplot(1, 1, 1)
+            ax.hold(True)
+            for juxta_spike in juxta_spikes:
+                ax.plot(time, juxta_spike, 'k-')
+            ax.grid(True)
+            ax.set_xlim(time_min, time_max)
+            ax.set_ylim(numpy.amin(juxta_spikes), numpy.amax(juxta_spikes))
+            ax.set_title("Juxtacellular spikes")
+            ax.set_xlabel("time")
+            ax.set_ylabel("voltage")
+            pylab.savefig(path)
+            pylab.close()
     
     
     
@@ -147,37 +173,28 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     # Select only the neighboring channels of the best channel.
     chan = params.get('validating', 'nearest_elec')
     if chan == 'auto':
-        ###### TODO: clean temporary zone
         # Set best channel as the channel with the highest change in amplitude.
         nodes, chans = get_neighbors(params, chan=None)
         spike_labels_juxta = numpy.zeros(len(spike_times_juxta))
-        #juxta_spikes = load_chunk(params, spike_times_juxta, chans=None)
         juxta_spikes = get_stas(params, spike_times_juxta, spike_labels_juxta, 0, chans, nodes=nodes, auto_align=False).T
         spike_labels_juxta_ = numpy.zeros(len(spike_times_juxta))
         juxta_spikes_ = get_juxta_stas(params, spike_times_juxta, spike_labels_juxta).T
         
-        USE_OLD_VERSION = False
-        if USE_OLD_VERSION:
-            tmp_juxta_spikes = juxta_spikes
-            tmp_juxta_spikes_ = juxta_spikes_
-        else:
-            # Remove juxta spikes times for which we see some artifacts in the corresponding extra snipets.
-            juxta_spike_times_selection = numpy.ones(juxta_spikes.shape[2], dtype=numpy.bool)
-            for elec in xrange(0, juxta_spikes.shape[1]):
-                median = numpy.median(juxta_spikes[:, elec, :])
-                tmp_juxta_spikes = numpy.abs(juxta_spikes - median)
-                mad_juxta_spikes = numpy.median(tmp_juxta_spikes)
-                for spike_time_index in xrange(0, juxta_spikes.shape[2]):
-                    # Since extra_valley is always true.
-                    min_juxta_spikes = numpy.amin(juxta_spikes[:, elec, spike_time_index])
-                    if min_juxta_spikes <= - 20.0 * juxta_thresh * mad_juxta_spikes:
-                        # There is an artifact.
-                        juxta_spike_times_selection[spike_time_index] = False
-                        ##### TODO: remove debug zone
-                        # print("##### Remove artifact (spike time index: {})".format(spike_time_index))
-                        ##### end debug zone
-            tmp_juxta_spikes = juxta_spikes[:, :, juxta_spike_times_selection]
-            tmp_juxta_spikes_ = juxta_spikes_[:, juxta_spike_times_selection]
+        # Remove juxta spikes times for which we see some artifacts in the corresponding extra snipets.
+        # TODO: to improve.
+        artifact_param = 10.0
+        juxta_spike_times_selection = numpy.ones(juxta_spikes.shape[2], dtype=numpy.bool)
+        for elec in xrange(0, juxta_spikes.shape[1]):
+            median = numpy.median(juxta_spikes[:, elec, :])
+            tmp_juxta_spikes = numpy.abs(juxta_spikes - median)
+            mad_juxta_spikes = numpy.median(tmp_juxta_spikes)
+            for spike_time_index in xrange(0, juxta_spikes.shape[2]):
+                lim_juxta_spikes = numpy.amax(numpy.abs(juxta_spikes[:, elec, spike_time_index]))
+                if artifact_param * juxta_thresh * mad_juxta_spikes <= lim_juxta_spikes:
+                    # There is an artifact.
+                    juxta_spike_times_selection[spike_time_index] = False
+        tmp_juxta_spikes = juxta_spikes[:, :, juxta_spike_times_selection]
+        tmp_juxta_spikes_ = juxta_spikes_[:, juxta_spike_times_selection]
         mean_juxta_spikes = numpy.mean(tmp_juxta_spikes, axis=2) # average over spike times
         max_juxta_spikes = numpy.amax(mean_juxta_spikes, axis=0) # argmax over timestamps
         min_juxta_spikes = numpy.amin(mean_juxta_spikes, axis=0) # argmin over timestamps
@@ -188,9 +205,8 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         if comm.rank == 0:
             msg = ["Ground truth neuron is close to channel {} (set automatically)".format(chan)]
             print_and_log(msg, level='default', logger=logger)
-        ##### TODO: clean temporary zone
     else:
-        chanl = int(chan)
+        chan = int(chan)
         nodes, chans = get_neighbors(params, chan=chan)
         ##### TODO: clean temporary zone
         elec = numpy.where(chans == chan)[0][0]
@@ -205,7 +221,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         if comm.rank == 0:
             msg = ["Ground truth neuron is close to channel {} (set manually)".format(chan)]
             print_and_log(msg, level='default', logger=logger)
-
+    
     if comm.rank == 0:
         
         if make_plots not in ['None', '']:

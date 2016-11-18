@@ -28,7 +28,7 @@ def get_neighbors(params, chan=None):
     return nodes, chans
 
 
-def get_juxta_stas(params, times_i, labels_i):
+def get_juxta_stas(params, times_i, labels_i=None):
     '''Extract STAs from the juxtacellular trace.'''
 
     file_out_suff = params.get('data', 'file_out_suff')
@@ -505,7 +505,6 @@ def highpass(data, BUTTER_ORDER=3, sampling_rate=10000, cut_off=500.0):
     return signal.filtfilt(b, a, data)
 
 
-
 def extract_juxta_spikes_(params):
     '''Detect spikes from the extracellular traces'''
     
@@ -556,6 +555,14 @@ def extract_juxta_spikes_(params):
     juxta_spike_times = juxta_spike_times[template_shift <= juxta_spike_times]
     juxta_spike_times = juxta_spike_times[juxta_spike_times < juxta_data.size - template_shift]
     
+    # Find juxta spike values of juxta spike times.
+    juxta_spike_values = numpy.zeros_like(juxta_spike_times, dtype='float')
+    for i, t in enumerate(juxta_spike_times):
+        if juxta_valley:
+            juxta_spike_values[i] = - juxta_data[t]
+        else:
+            juxta_spike_values[i] = + juxta_data[t]
+    
     # Save juxta spike times to BEER file.
     beer_file = h5py.File(beer_path, 'a', libver='latest')
     group_name = "juxta_spiketimes"
@@ -566,14 +573,6 @@ def extract_juxta_spikes_(params):
     beer_file.create_dataset(key, data=juxta_spike_times)
     beer_file.close()
     
-    # Find juxta spike values of juxta spike times.
-    juxta_spike_values = numpy.zeros_like(juxta_spike_times, dtype='float')
-    for i, t in enumerate(juxta_spike_times):
-        if juxta_valley:
-            juxta_spike_values[i] = - juxta_data[t]
-        else:
-            juxta_spike_values[i] = + juxta_data[t]
-    
     # Save juxta spike values to BEER file.
     beer_file = h5py.File(beer_path, 'a', libver='latest')
     group_name = "juxta_spike_values"
@@ -583,9 +582,8 @@ def extract_juxta_spikes_(params):
     key = "{}/elec_0".format(group_name)
     beer_file.create_dataset(key, data=juxta_spike_values)
     beer_file.close()
-
+    
     return
-
 
 
 def extract_juxta_spikes(params):
