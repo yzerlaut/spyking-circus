@@ -1003,3 +1003,49 @@ def get_class_weights_bis(n_class_0, n_class_1, n=7):
         class_weights.append(class_weight)
     return alphas, betas, class_weights
 ##### end temporary zone
+
+
+################################################################################
+
+def get_beer_path(params):
+    '''Retrieve the path of the BEER file.'''
+    file_out_suff = params.get('data', 'file_out_suff')
+    beer_path = "{}.beer.hdf5".format(file_out_suff)
+    return beer_path
+
+def get_beer_file(params, mode='r'):
+    '''Retrieve and open the BEER file.'''
+    beer_path = get_beer_path(params)
+    if os.path.exists(beer_path):
+        beer_file = h5py.File(beer_path, mode, libver='latest')
+    else:
+        raise Exception("BEER file {} not found!".format(beer_path))
+    return beer_file
+
+def set_flag(params, flag_name, flag_value):
+    '''Raise or not a flag into the BEER file.'''
+    beer_file = get_beer_file(params, 'a')
+    flag_key = "flag_{}".format(flag_name)
+    assert(isinstance(flag_value, bool))
+    try:
+        if flag_key in beer_file.keys():
+            beer_file.pop(flag_key)
+        beer_file.create_dataset(flag_key, data=flag_value)
+    finally:
+        beer_file.close()
+    return
+
+def get_flag(params, flag_name):
+    '''Retrieve the status of a flag into the BEER file.'''
+    beer_file = get_beer_file(params, 'r')
+    flag_key = "flag_{}".format(flag_name)
+    flag_value = None
+    try:
+        flag = beer_file.get(flag_key)
+        if hasattr(flag, "value"):
+            flag_value = flag.value
+        else:
+            pass
+    finally:
+        beer_file.close()
+    return flag_value

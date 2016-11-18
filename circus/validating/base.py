@@ -145,6 +145,8 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             time_num = 2 * template_shift + 1
             time = numpy.linspace(time_min, time_max, num=time_num)
             juxta_spikes = get_juxta_stas(params, spike_times_juxta)
+            y_min = numpy.amin(juxta_spikes)
+            y_max = numpy.amax(juxta_spikes)
             plot_filename = "beer-juxta-spikes.{}".format(make_plots)
             path = os.path.join(plot_path, plot_filename)
             import pylab
@@ -152,10 +154,12 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             ax = fig.add_subplot(1, 1, 1)
             ax.hold(True)
             for juxta_spike in juxta_spikes:
-                ax.plot(time, juxta_spike, 'k-')
+                ax.plot(time, juxta_spike, '0.5')
+            ax.plot(time, numpy.mean(juxta_spikes, axis=0), '0.0')
+            ax.plot([0.0, 0.0], [y_min, y_max], '0.0')
             ax.grid(True)
             ax.set_xlim(time_min, time_max)
-            ax.set_ylim(numpy.amin(juxta_spikes), numpy.amax(juxta_spikes))
+            ax.set_ylim(y_min, y_max)
             ax.set_title("Juxtacellular spikes")
             ax.set_xlabel("time")
             ax.set_ylabel("voltage")
@@ -1158,162 +1162,173 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     if comm.rank == 0:
         print_and_log(["Estimating the ROC curve..."], level='default', logger=logger)
     
-    
-    _, _, class_weights = get_class_weights(y_gt, y_ngt, n=roc_sampling)
-    
-    # Distribute weights over the CPUs.
-    loc_indices = numpy.arange(comm.rank, roc_sampling, comm.size)
-    loc_class_weights = [class_weights[loc_index] for loc_index in loc_indices]
-    loc_nb_class_weights = len(loc_class_weights)
-    
-    # Preallocation to collect results.
-    confusion_matrices = loc_nb_class_weights * [None]
-    y_decfs = loc_nb_class_weights * [None]
-    y_preds = loc_nb_class_weights * [None]
-    
-    if comm.rank == 0:
-        pbar = get_progressbar(loc_nb_class_weights)
-    
-    if model == 'sgd':
-        for (count, class_weight) in enumerate(loc_class_weights):
-            # Declare classifier.
-            wclf = SGDClassifier(loss='log',
-                                 # penalty='l2',
-                                 # alpha=1.0e-12,
-                                 fit_intercept=True,
-                                 random_state=0,
-                                 # learning_rate='constant',
-                                 learning_rate='optimal',
-                                 # eta0=sys.float_info.epsilon,
-                                 class_weight=class_weight)
-            # Initialize classifier (i.e. fake launch, weights initialization).
-            wclf.set_params(n_iter=1)
-            # wclf.set_params(eta0=sys.float_info.epsilon)
-            wclf.set_params(warm_start=False)
-            wclf.fit(X_train, y_train)
-            # Initialize classifier (i.e. ellipsoid weights).
-            coefs_init = ellipsoid_matrix_to_coefs(A_init, b_init, c_init)
-            wclf.coef_ = coefs_init[1:, :].reshape(1, -1)
-            wclf.intercept_ = coefs_init[:1, :].ravel()
-            # Train classifier.
-            n_iter = min(max_iter, 1000000 // N_max)
-            wclf.set_params(n_iter=n_iter)
-            # wclf.set_params(eta0=learning_rate_init)
-            wclf.set_params(warm_start=True)
-            wclf.fit(X_train, y_train)
-            
-            
-            ##### TODO: fix depreciated zone
-            
-            # Compute the prediction on the test set.
-            y_pred = wclf.predict(X_test)
-            y_decf = wclf.decision_function(X_test)
-            # Compute true positive, false negative, true negatives and
-            # false positives.
-            p = (y_test == 0.0)
-            tp = float(numpy.count_nonzero(y_pred[p] == y_test[p]))
-            fn = float(numpy.count_nonzero(y_pred[p] != y_test[p]))
-            n = (y_test == 1.0)
-            tn = float(numpy.count_nonzero(y_pred[n] == y_test[n]))
-            fp = float(numpy.count_nonzero(y_pred[n] != y_test[n]))
-            # Construct the confusion matrix.
-            confusion_matrix = numpy.array([[tp, fn], [fp, tn]])
-            # Save results.
-            y_preds[count] = y_pred
-            y_decfs[count] = y_decf
-            confusion_matrices[count] = confusion_matrix
-            
-            if comm.rank == 0:
-                pbar.update(count)
-            
-    else:
-        raise Exception("Unsupported classifier: model={}".format(model))
-    
-    if comm.rank == 0:
-        pbar.finish()
+    # Check if the estimation of the ROC curve has already been done.
+    do_weighted_learning = not get_flag(params, 'weighted_learning')
     
     comm.Barrier()
     
-    
-    # Gather results on the root CPU.
-    indices = comm.gather(loc_indices, root=0)
-    y_preds_tmp = comm.gather(y_preds, root=0)
-    y_decfs_tmp = comm.gather(y_decfs, root=0)
-    if test_method == 'full':
-        time_preds_tmp = comm.gather(time_preds, root=0)
-    
-    if comm.rank == 0:
+    if do_weighted_learning:
         
-        beer_filename = "{}.beer.hdf5".format(file_out_suff)
-        beer_file = h5py.File(beer_filename, 'a', libver='latest')
-        group_name = "beer_spiketimes"
-        if group_name in beer_file.keys():
-            beer_file.pop(group_name)
-        beer_file.create_group(group_name)
+        _, _, class_weights = get_class_weights(y_gt, y_ngt, n=roc_sampling)
+        
+        # Distribute weights over the CPUs.
+        loc_indices = numpy.arange(comm.rank, roc_sampling, comm.size)
+        loc_class_weights = [class_weights[loc_index] for loc_index in loc_indices]
+        loc_nb_class_weights = len(loc_class_weights)
+        
+        # Preallocation to collect results.
+        confusion_matrices = loc_nb_class_weights * [None]
+        y_decfs = loc_nb_class_weights * [None]
+        y_preds = loc_nb_class_weights * [None]
+        
+        if comm.rank == 0:
+            pbar = get_progressbar(loc_nb_class_weights)
+        
+        if model == 'sgd':
+            for (count, class_weight) in enumerate(loc_class_weights):
+                # Declare classifier.
+                wclf = SGDClassifier(loss='log',
+                                     # penalty='l2',
+                                     # alpha=1.0e-12,
+                                     fit_intercept=True,
+                                     random_state=0,
+                                     # learning_rate='constant',
+                                     learning_rate='optimal',
+                                     # eta0=sys.float_info.epsilon,
+                                     class_weight=class_weight)
+                # Initialize classifier (i.e. fake launch, weights initialization).
+                wclf.set_params(n_iter=1)
+                # wclf.set_params(eta0=sys.float_info.epsilon)
+                wclf.set_params(warm_start=False)
+                wclf.fit(X_train, y_train)
+                # Initialize classifier (i.e. ellipsoid weights).
+                coefs_init = ellipsoid_matrix_to_coefs(A_init, b_init, c_init)
+                wclf.coef_ = coefs_init[1:, :].reshape(1, -1)
+                wclf.intercept_ = coefs_init[:1, :].ravel()
+                # Train classifier.
+                n_iter = min(max_iter, 1000000 // N_max)
+                wclf.set_params(n_iter=n_iter)
+                # wclf.set_params(eta0=learning_rate_init)
+                wclf.set_params(warm_start=True)
+                wclf.fit(X_train, y_train)
+                
+                
+                ##### TODO: fix depreciated zone
+                
+                # Compute the prediction on the test set.
+                y_pred = wclf.predict(X_test)
+                y_decf = wclf.decision_function(X_test)
+                # Compute true positive, false negative, true negatives and
+                # false positives.
+                p = (y_test == 0.0)
+                tp = float(numpy.count_nonzero(y_pred[p] == y_test[p]))
+                fn = float(numpy.count_nonzero(y_pred[p] != y_test[p]))
+                n = (y_test == 1.0)
+                tn = float(numpy.count_nonzero(y_pred[n] == y_test[n]))
+                fp = float(numpy.count_nonzero(y_pred[n] != y_test[n]))
+                # Construct the confusion matrix.
+                confusion_matrix = numpy.array([[tp, fn], [fp, tn]])
+                # Save results.
+                y_preds[count] = y_pred
+                y_decfs[count] = y_decf
+                confusion_matrices[count] = confusion_matrix
+                
+                if comm.rank == 0:
+                    pbar.update(count)
+                
+        else:
+            raise Exception("Unsupported classifier: model={}".format(model))
+        
+        if comm.rank == 0:
+            pbar.finish()
+    
+        comm.Barrier()
+        
+        
+        # Gather results on the root CPU.
+        indices = comm.gather(loc_indices, root=0)
+        y_preds_tmp = comm.gather(y_preds, root=0)
+        y_decfs_tmp = comm.gather(y_decfs, root=0)
         if test_method == 'full':
-            for indices_, loc_time_preds, loc_y_preds, loc_y_decfs in zip(indices, time_preds_tmp, y_preds_tmp, y_decfs_tmp):
-                for index, time_pred, y_pred, y_decf in zip(indices_, loc_time_preds, loc_y_preds, loc_y_decfs):
-                    filename = "{}/time_pred_{}".format(group_name, index)
-                    #print(filename)
-                    beer_file.create_dataset(filename, data=time_pred)
-                    filename = "{}/y_pred_{}".format(group_name, index)
-                    #print(filename)
-                    beer_file.create_dataset(filename, data=y_pred)
-                    filename = "{}/y_decf_{}".format(group_name, index)
-                    #print(filename)
-                    beer_file.create_dataset(filename, data=y_decf)
-                    filename = "{}/temp_{}".format(group_name, index)
-                    #print(filename)
-                    mask = (y_pred == 0.0)
-                    temp = time_pred[mask]
-                    beer_file.create_dataset(filename, data=temp)
-        elif test_method == 'downsampled':
-            for indices_, loc_y_preds, loc_y_decfs in zip(indices, y_preds_tmp, y_decfs_tmp):
-                for index, y_pred, y_decf in zip(indices_, loc_y_preds, loc_y_decfs):
-                    filename = "{}/y_pred_{}".format(group_name, index)
-                    #print(filename)
-                    beer_file.create_dataset(filename, data=y_pred)
-                    filename = "{}/y_decf_{}".format(group_name, index)
-                    #print(filename)
-                    beer_file.create_dataset(filename, data=y_decf)
-        beer_file.close()
-    
-    ##### end temporary zone
-    
-    
-    # Gather results on the root CPU.
-    indices = comm.gather(loc_indices, root=0)
-    confusion_matrices_tmp = comm.gather(confusion_matrices, root=0)
-    
-    if comm.Get_rank() == 0:
+            time_preds_tmp = comm.gather(time_preds, root=0)
         
-        # Reorder confusion matrices properly.
-        confusion_matrices = roc_sampling * [None]
-        for (loc_indices, loc_confusion_matrices_tmp) in zip(indices, confusion_matrices_tmp):
-            for (loc_index, loc_confusion_matrix) in zip(loc_indices, loc_confusion_matrices_tmp):
-                confusion_matrices[loc_index] = loc_confusion_matrix
-        # Save confusion matrices to BEER file.
-        filename = "{}.beer.hdf5".format(file_out_suff)
-        beer_file = h5py.File(filename, 'a', libver='latest')
-        ## Save class weights.
-        class_weights_ = numpy.array([[cw[0], cw[1]] for cw in class_weights])
-        class_weights_key = "class_weights"
-        if class_weights_key in beer_file.keys():
-            beer_file.pop(class_weights_key)
-        beer_file.create_dataset(class_weights_key, data=class_weights_)
-        ## Save confusion matrices.
-        confusion_matrices_ = numpy.array(confusion_matrices)
-        confusion_matrices_key = "confusion_matrices"
-        if confusion_matrices_key in beer_file.keys():
-            beer_file.pop(confusion_matrices_key)
-        beer_file.create_dataset(confusion_matrices_key, data=confusion_matrices_)
-        beer_file.close()
-        # Compute false positive rates and true positive rates.
-        fprs = [M[1, 0] / (M[1, 0] + M[1, 1]) for M in confusion_matrices]
-        tprs = [M[0, 0] / (M[0, 0] + M[0, 1]) for M in confusion_matrices]
-        # Add false positive rates and true positive rates endpoints.
-        fprs = [1.0] + fprs + [0.0]
-        tprs = [1.0] + tprs + [0.0]
+        if comm.rank == 0:
+            
+            beer_filename = "{}.beer.hdf5".format(file_out_suff)
+            beer_file = h5py.File(beer_filename, 'a', libver='latest')
+            group_name = "beer_spiketimes"
+            if group_name in beer_file.keys():
+                beer_file.pop(group_name)
+            beer_file.create_group(group_name)
+            if test_method == 'full':
+                for indices_, loc_time_preds, loc_y_preds, loc_y_decfs in zip(indices, time_preds_tmp, y_preds_tmp, y_decfs_tmp):
+                    for index, time_pred, y_pred, y_decf in zip(indices_, loc_time_preds, loc_y_preds, loc_y_decfs):
+                        filename = "{}/time_pred_{}".format(group_name, index)
+                        beer_file.create_dataset(filename, data=time_pred)
+                        filename = "{}/y_pred_{}".format(group_name, index)
+                        beer_file.create_dataset(filename, data=y_pred)
+                        filename = "{}/y_decf_{}".format(group_name, index)
+                        beer_file.create_dataset(filename, data=y_decf)
+                        filename = "{}/temp_{}".format(group_name, index)
+                        mask = (y_pred == 0.0)
+                        temp = time_pred[mask]
+                        beer_file.create_dataset(filename, data=temp)
+            elif test_method == 'downsampled':
+                for indices_, loc_y_preds, loc_y_decfs in zip(indices, y_preds_tmp, y_decfs_tmp):
+                    for index, y_pred, y_decf in zip(indices_, loc_y_preds, loc_y_decfs):
+                        filename = "{}/y_pred_{}".format(group_name, index)
+                        beer_file.create_dataset(filename, data=y_pred)
+                        filename = "{}/y_decf_{}".format(group_name, index)
+                        beer_file.create_dataset(filename, data=y_decf)
+            beer_file.close()
+    
+    
+        # Gather results on the root CPU.
+        indices = comm.gather(loc_indices, root=0)
+        confusion_matrices_tmp = comm.gather(confusion_matrices, root=0)
+        
+        if comm.Get_rank() == 0:
+        
+            # Reorder confusion matrices properly.
+            confusion_matrices = roc_sampling * [None]
+            for (loc_indices, loc_confusion_matrices_tmp) in zip(indices, confusion_matrices_tmp):
+                for (loc_index, loc_confusion_matrix) in zip(loc_indices, loc_confusion_matrices_tmp):
+                    confusion_matrices[loc_index] = loc_confusion_matrix
+            # Save confusion matrices to BEER file.
+            filename = "{}.beer.hdf5".format(file_out_suff)
+            beer_file = h5py.File(filename, 'a', libver='latest')
+            ## Save class weights.
+            class_weights_ = numpy.array([[cw[0], cw[1]] for cw in class_weights])
+            class_weights_key = "class_weights"
+            if class_weights_key in beer_file.keys():
+                beer_file.pop(class_weights_key)
+            beer_file.create_dataset(class_weights_key, data=class_weights_)
+            ## Save confusion matrices.
+            confusion_matrices_ = numpy.array(confusion_matrices)
+            confusion_matrices_key = "confusion_matrices"
+            if confusion_matrices_key in beer_file.keys():
+                beer_file.pop(confusion_matrices_key)
+            beer_file.create_dataset(confusion_matrices_key, data=confusion_matrices_)
+            beer_file.close()
+            # Compute false positive rates and true positive rates.
+            fprs = [M[1, 0] / (M[1, 0] + M[1, 1]) for M in confusion_matrices]
+            tprs = [M[0, 0] / (M[0, 0] + M[0, 1]) for M in confusion_matrices]
+            # Add false positive rates and true positive rates endpoints.
+            fprs = [1.0] + fprs + [0.0]
+            tprs = [1.0] + tprs + [0.0]
+            
+            set_flag(params, 'weighted_learning', True)
+
+    else:
+        
+        # Retrieve results previously saved for weighted clustering.
+        if comm.rank == 0:
+            # TODO: find all the results we need to load...
+            # y_preds_tmp = io.load_data(params, 'y-preds')
+            # y_decfs_tmp = io.load_data(params, 'y-decfs')
+            # print(y_preds_tmp.shape)
+            # print(y_decfs_tmp.shape)
+
     
     
     if comm.rank == 0:
