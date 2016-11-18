@@ -528,7 +528,15 @@ def load_data(params, data, extension=''):
     data : {'thresholds', 'spatial_whitening', 'temporal_whitening', 'basis',
             'templates', 'norm-templates', 'spike-cluster', 'spikedetekt',
             'clusters', 'electrodes', 'results', 'overlaps', 'limits',
-            'injected_spikes', 'triggers'}
+            'injected_spikes', 'triggers', 'juxta-mad', 'juxta-triggers',
+            'juxta-values', 'extra-mads', 'extra-triggers', 'extra-values',
+            'class-weights', 'confusion-matrices', 'proportion',
+            'threshold-false-negatives', 'false-positive-rates',
+            'true-positive-rates', 'false-positive-error-rates',
+            'true-positive-error-rates', 'sc-contingency-matrices',
+            'sc-false-positive-error-rates', 'sc-false-negative-error-rates',
+            'sc-contingency-matrix', 'sc-best-false-positive-error-rates',
+            'sc-best-false-negative-error-rates', 'selection'}
     
     """
 
@@ -927,6 +935,49 @@ def load_data(params, data, extension=''):
             return selection
         else:
             raise Exception('No selection found! Check suffix or check if file `{}` exists?'.format(filename))
+    elif data == 'beer-preds':
+        roc_sampling = params.getint('validating', 'roc_sampling')
+        beer_file = get_beer_file(params, 'r')
+        beer_preds = [None] * roc_sampling
+        try:
+            for i in range(0, roc_sampling):
+                beer_key = 'beer_spiketimes/y_pred_{}'.format(i)
+                beer_pred = beer_file.get(beer_key)
+                beer_preds[i] = beer_pred.value
+        finally:
+            beer_file.close()
+        beer_preds = numpy.array(beer_preds)
+        return beer_preds
+    elif data == 'beer-decfs':
+        roc_sampling = params.getint('validating', 'roc_sampling')
+        beer_file = get_beer_file(params, 'r')
+        beer_decfs = [None] * roc_sampling
+        try:
+            for i in range(0, roc_sampling):
+                beer_key = 'beer_spiketimes/y_pred_{}'.format(i)
+                beer_decf = beer_file.get(beer_key)
+                beer_decfs[i] = beer_decf.value
+        finally:
+            beer_file.close()
+        beer_decfs = numpy.array(beer_decfs)
+        return beer_decfs
+
+
+def get_beer_path(params):
+    '''Retrieve the path of the BEER file.'''
+    file_out_suff = params.get('data', 'file_out_suff')
+    beer_path = "{}.beer.hdf5".format(file_out_suff)
+    return beer_path
+
+
+def get_beer_file(params, mode='r'):
+    '''Retrieve and open the BEER file.'''
+    beer_path = get_beer_path(params)
+    if os.path.exists(beer_path):
+        beer_file = h5py.File(beer_path, mode, libver='latest')
+    else:
+        raise Exception("BEER file {} not found!".format(beer_path))
+    return beer_file
 
 
 def write_datasets(h5file, to_write, result, electrode=None):
@@ -937,6 +988,7 @@ def write_datasets(h5file, to_write, result, electrode=None):
             mykey = key
         h5file.create_dataset(mykey, shape=result[mykey].shape, dtype=result[mykey].dtype, chunks=True)
         h5file.get(mykey)[:] = result[mykey]
+
 
 def collect_data(nb_threads, params, erase=False, with_real_amps=False, with_voltages=False, benchmark=False):
 

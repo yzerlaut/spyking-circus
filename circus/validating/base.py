@@ -1323,12 +1323,24 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         
         # Retrieve results previously saved for weighted clustering.
         if comm.rank == 0:
-            # TODO: find all the results we need to load...
-            # y_preds_tmp = io.load_data(params, 'y-preds')
-            # y_decfs_tmp = io.load_data(params, 'y-decfs')
-            # print(y_preds_tmp.shape)
-            # print(y_decfs_tmp.shape)
-
+            if test_method == 'full':
+                y_preds_tmp = io.load_data(params, 'beer-preds')
+                y_decfs_tmp = io.load_data(params, 'beer-decfs')
+                print(y_preds_tmp.shape)
+                print(y_decfs_tmp.shape)
+                # TODO: find all the results we need to load...
+            elif test_method == 'downsampled':
+                y_preds_tmp = io.load_data(params, 'beer-preds')
+                y_decfs_tmp = io.load_data(params, 'beer-decfs')
+                # print(y_preds_tmp.shape)
+                # print(y_decfs_tmp.shape)
+                # print(y_preds_tmp)
+                # print(y_decfs_tmp)
+                # print(numpy.sum(y_preds_tmp, axis=1))
+                # print(numpy.sum(y_decfs_tmp, axis=1))
+                # TODO: find all the results we need to load...
+            else:
+                raise Exception("Unknown {} test method for BEER validation!".format(test_method))
     
     
     if comm.rank == 0:
