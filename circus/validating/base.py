@@ -56,8 +56,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     verbose   = False
     skip_demo = False
     make_plots_snippets = False
-    # test_method = 'full' # full test set
-    test_method = 'downsampled' # downsampled test set
     
     # N_max = 1000000
     N_max = 12000
@@ -66,7 +64,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     # N_max = 1500
     
     # Compute 'time_min' and 'time_max'.
-
+    
     time_min = template_shift
     time_max = (data_file.duration - 1) - template_shift
     
@@ -245,6 +243,30 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     
     
+    ##### PLOT NUMBER OF EXTRACELLULAR SPIKES DETECTED ON EACH ELECTRODE #######
+    
+    if comm.rank == 0:
+        
+        if make_plots not in ['None', '']:
+            N_e = params.getint('data', 'N_e')
+            x = [e for e in range(0, N_e)]
+            y = [len(spike_times_ngt_tmp[e]) for e in range(0, N_e)]
+            plot_filename = "beer-extra-number.{}".format(make_plots)
+            path = os.path.join(plot_path, plot_filename)
+            import pylab
+            fig = pylab.figure()
+            ax = fig.add_subplot(1, 1, 1)
+            ax.bar(x, y, color='0.8', align='center')
+            ax.grid(True)
+            ax.set_xlim(0.0 - 1.0, float(N_e - 1) + 1.0)
+            ax.set_title("Number of detected extracellular spikes ({})".format(sum(y)))
+            ax.set_xlabel("electrode")
+            ax.set_ylabel("number of spikes")
+            pylab.savefig(path)
+            pylab.close()
+    
+    
+    
     ##### PLOT INFLUENCE OF EXTRACELLULAR THRESHOLD ############################
     
     # Compute the cumulative distribution of extra spike times according to the threshold values.
@@ -266,7 +288,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     unknown_zone = Rectangle((0.0, 0), extra_thresh, ymax,
                              hatch='/', facecolor='white', zorder=3)
-
+    
     if comm.rank == 0:
         
         if make_plots not in ['None', '']:
@@ -413,21 +435,99 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     
     
+    ############################################################################
+    
+    # TODO: complete...
+
+    labels_i = numpy.zeros_like(spike_times_juxta)
+    _, all_chans = get_neighbors(params, chan=None)
+    #####
+    # TODO: clean...
+    # print("Chan: {}".format(chan))
+    # print("Chans: {}".format(chans))
+    # print("All chans: {}".format(all_chans))
+    #####
+    if SHARED_MEMORY:
+        extra_stas_gt = get_stas_memshared(params, spike_times_juxta, labels_i, chan, all_chans, nodes=nodes, auto_align=False).T
+    else:
+        extra_stas_gt = get_stas(params, spike_times_juxta, labels_i, chan, all_chans, nodes=nodes, auto_align=False).T
+    extra_sta_gt = np.mean(extra_stas_gt, axis=2)
+    extra_sta_gt = extra_sta_gt.T
+    
+    #####
+    # TODO: clean...
+    # print(type(extra_sta_gt))
+    # print(extra_sta_gt.shape)
+    # print(extra_sta_gt)
+    #####
+    
+    # Find the peak (i.e. lag and electrode)
+    extra_sta_index = numpy.argmin(extra_sta_gt)
+    extra_sta_shape = extra_sta_gt.shape
+    extra_sta_elec, extra_sta_lag = numpy.unravel_index(extra_sta_index, extra_sta_shape)
+    #####
+    # TODO: clean
+    # print("Peak (electrode + lag): {} + {}".format(extra_sta_elec, extra_sta_lag))
+    #####
+    
+    if comm.rank == 0:
+        if make_plots not in ['None', '']:
+            sampling_rate  = params.getint('data', 'sampling_rate')
+            im = extra_sta_gt
+            left  = - 0.5 * float(im.shape[1]) * 1000.0 / float(sampling_rate)
+            right = + 0.5 * float(im.shape[1]) * 1000.0 / float(sampling_rate)
+            bottom = float(im.shape[0])
+            top = 0.0
+            extent = (left, right, bottom, top)
+            plot_filename = "beer-gt-extra-stas.{}".format(make_plots)
+            path = os.path.join(plot_path, plot_filename)
+            fig = pylab.figure()
+            ax = fig.add_subplot(1, 1, 1)
+            ax.imshow(im, extent=extent, aspect='auto', interpolation='nearest', cmap='viridis')
+            ax.invert_yaxis()
+            ax.set_title("Extracellular STA (with juxtacellular triggers)")
+            ax.set_xlabel("time (ms)")
+            ax.set_ylabel("channel")
+            pylab.savefig(path)
+            pylab.close()
+    
+    
+    
     ##### GROUND TRUTH CELL'S SAMPLES ##########################################
     
     if comm.rank == 0:
         print_and_log(["Collecting ground truth cell's samples..."], level='debug', logger=logger)
     
+    #####
+    # # TODO: clean...
+    # print(type(spike_times_juxta))
+    # print(type(spike_times_extra))
+    # print(spike_times_juxta)
+    # print(spike_times_extra)
+    # print(spike_times_juxta.shape)
+    # print(spike_times_extra.shape)
+    #####
     
     # Retrieve the spike times of the "ground truth cell".
     tresh = int(float(params.rate) * matching_jitter * 1.0e-3) # "matching threshold"
     matched_spike_times_juxta = numpy.zeros_like(spike_times_juxta, dtype='bool')
     matched_spike_times_extra = numpy.zeros_like(spike_times_extra, dtype='bool')
     mismatched_spike_times_extra = numpy.zeros_like(spike_times_extra, dtype='bool')
+    #####
+    # # TODO: clean...
+    # tmps = numpy.zeros(10) # Count simultaneous matches
+    # tmps_ = numpy.zeros(21) # Count matching lags
+    #####
     for i, spike_time_juxta in enumerate(spike_times_juxta):
         diff = abs(spike_times_extra - spike_time_juxta)
         idx = numpy.where(diff <= thresh)[0]
         if 0 < len(idx):
+            #####
+            # # TODO: clean
+            # tmps[len(idx)] += 1.0
+            # for k in idx:
+            #     tmps_[diff[k]] += 1.0
+            #####
             idx_ = numpy.argmin(diff[idx])
             matched_spike_times_juxta[i] = True
             matched_spike_times_extra[idx[idx_]] = True
@@ -436,7 +536,42 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         else:
             pass
     
-    ##### TODO: clean working zone
+    #####
+    # # TODO: clean
+    # print("#####")
+    # print(matched_spike_times_juxta)
+    # print(matched_spike_times_extra)
+    # print(mismatched_spike_times_extra)
+    # print("#####")
+    # print(matched_spike_times_juxta.shape)
+    # print(numpy.sum(matched_spike_times_juxta))
+    # print("#####")
+    # print(matched_spike_times_extra.shape)
+    # print(numpy.sum(matched_spike_times_extra))
+    #####
+    
+    #####
+    # # TODO: clean...
+    # if comm.rank == 0:
+    #     if make_plots not in ['None', '']:
+    #         plot_filename = "beer-gt-matching.{}".format(make_plots)
+    #         path = os.path.join(plot_path, plot_filename)
+    #         fig = pylab.figure()
+    #         ax = fig.add_subplot(1, 2, 1)
+    #         ax.bar(numpy.arange(0, len(tmps)), tmps, align='center')
+    #         ax.set_xlabel("number of simultaneous matches")
+    #         ax.set_ylabel("number of occurences")
+    #         ax = fig.add_subplot(1, 2, 2)
+    #         ax.bar(numpy.arange(0, 21), tmps_, align='center')
+    #         ax.set_xlim(0.0 - 0.5, 20 + 0.5)
+    #         ax.set_xlabel("matching lag")
+    #         ax.set_ylabel("number of occurences")
+    #         pylab.savefig(path)
+    #         pylab.close()
+    #####
+    
+    #####
+    # TODO: clean working zone
     
     threshold_false_negatives = matched_spike_times_juxta.size - numpy.count_nonzero(matched_spike_times_juxta)
     
@@ -452,7 +587,8 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         beer_file.close()
         
     
-    ##### TODO: clean temporary zone
+    #####
+    # TODO: clean temporary zone
     # Ground truth spike times defined from the juxtacellular traces.
     mask_gt = matched_spike_times_juxta # keep all the 'ground truth' spike times
     spike_times_gt = spike_times_juxta[mask_gt]
@@ -465,35 +601,35 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     ##### end working zone
     
-    
     if comm.rank == 0:
         if verbose:
             msg = [
                 "spike_times_gt.size: {}".format(spike_times_gt.size),
             ]
             print_and_log(msg, level='default', logger=logger)
+
     
-    
-    ##### TODO: clean working zone
-    # TODO: share memory for these data structures.
+    # Get the PCA representatives of the ground truth data samples.
     
     labels_gt = numpy.zeros(spike_times_gt.size)
-    ##### TODO: clean test zone
     if SHARED_MEMORY:
         spikes_gt = get_stas_memshared(params, spike_times_gt, labels_gt, chan, chans, nodes=nodes, auto_align=False).T
     else:
         spikes_gt = get_stas(params, spike_times_gt, labels_gt, chan, chans, nodes=nodes, auto_align=False).T
-    ##### end test zone
     
     # Reshape data.
     N_t = spikes_gt.shape[0]
     N_e = spikes_gt.shape[1]
     N_gt = spikes_gt.shape[2]
-    ##### TODO: remove temporary zone
-    # if comm.rank == 0:
-    #     print(spikes_gt.flags)
-    # spikes_gt.shape = (N_t, N_e * N_gt)
-    ##### end temporary zone
+    #####
+    # # TODO: clean...
+    # print("spike_times_gt: {}".format(spike_times_gt))
+    # print("N_t: {}".format(N_t))
+    # print("N_e: {}".format(N_e))
+    # print("N_gt: {}".format(N_gt))
+    # print("N_p: {}".format(N_p))
+    # print("basis_proj.shape: {}".format(basis_proj.shape))
+    #####
     spikes_gt = spikes_gt.reshape(N_t, N_e * N_gt)
     spikes_gt = spikes_gt.T
     # Compute the PCA coordinates of each spike of the "ground truth cell".
@@ -514,8 +650,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 "y_gt.shape: {}".format(y_gt.shape),
             ]
             print_and_log(msg, level='default', logger=logger)
-    
-    ##### end working zone
     
     
     
@@ -541,6 +675,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     ##### end temporary zone
     spike_times_ngt = numpy.sort(spike_times_ngt)
     
+    
     if comm.rank == 0:
         if verbose:
             msg = [
@@ -549,25 +684,16 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             print_and_log(msg, level='default', logger=logger)
     
     
-    ##### TODO: clean working zone
-    
     labels_ngt = numpy.zeros(spike_times_ngt.size)
-    ##### TODO: clean temporary zone
     if SHARED_MEMORY:
         spikes_ngt = get_stas_memshared(params, spike_times_ngt, labels_ngt, chan, chans, nodes=nodes, auto_align=False).T
     else:
         spikes_ngt = get_stas(params, spike_times_ngt, labels_ngt, chan, chans, nodes=nodes, auto_align=False).T
-    ##### TODO: end temporary zone
     
     # Reshape data.
     N_t = spikes_ngt.shape[0]
     N_e = spikes_ngt.shape[1]
     N_ngt = spikes_ngt.shape[2]
-    ##### TODO: remove temporary zone
-    # if comm.rank == 0:
-    #     print(spikes_ngt.flags)
-    # spikes_ngt.shape = (N_t, N_e * N_ngt)
-    ##### end temporary zone
     spikes_ngt = spikes_ngt.reshape(N_t, N_e * N_ngt)
     spikes_ngt = spikes_ngt.T
     # Compute the PCA coordinates of each spike of the "non ground truth cells".
@@ -589,14 +715,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             ]
             print_and_log(msg, level='default', logger=logger)
     
-    # import time
-    # secs = 10.0 # s
-    # if comm.rank == 0:
-    #     print("Start to sleep...")
-    # time.sleep(secs)
-    # sys.exit(1)
-    
-    ##### end working zone
+    comm.Barrier()
     
     
     
@@ -655,9 +774,25 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 print_and_log(msg, level='default', logger=logger)
     
     ## Create the output dataset.
+    #####
+    # # TODO: clean...
+    # print("y_gt.shape: {}".format(y_gt.shape))
+    # print("y_ngt.shape: {}".format(y_ngt.shape))
+    #####
     y_raw = numpy.vstack((y_gt, y_ngt))
+    #####
+    # # TODO: clean...
+    # print("y_raw.shape: {}".format(y_raw.shape))
+    #####
     y_raw = y_raw.ravel()
+    #####
+    # # TODO: clean...
+    # print("y_raw.shape: {}".format(y_raw.shape))
+    #####
     y = y_raw
+    
+    # # Create the corresponding spike times.
+    spike_times_all = numpy.concatenate((spike_times_gt, spike_times_ngt))
     
     if comm.rank == 0:
         if verbose:
@@ -676,7 +811,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     if comm.rank == 0:
         
         #print_and_log(["Sanity plot..."], level='info', logger=params)
-        
         
         if make_plots not in ['None', '']:
             plot_filename = "beer-datasets.%s" %make_plots
@@ -861,10 +995,10 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         
         
         if make_plots not in ['None', '']:
-            # Plot initial classifier (ellipsoid).
-            #title = "Initial classifier (ellipsoid)"
-            #plot_filename = "beer-classifier-projection-init.%s" %make_plots
-            #path = os.path.join(plot_path, plot_filename)
+            # # Plot initial classifier (ellipsoid).
+            # title = "Initial classifier (ellipsoid)"
+            # plot_filename = "beer-classifier-projection-init.%s" %make_plots
+            # path = os.path.join(plot_path, plot_filename)
             
             data_class_1 = [X_gt, X_ngt], [y_gt, y_ngt], A_init, b_init, c_init
     
@@ -894,6 +1028,9 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     model = 'sgd'
     
+    indices_gt = numpy.where(y == 0.0)[0]
+    indices_ngt = numpy.where(y == 1.0)[0]
+    
     def split_train_test(X, y, test_size=0.5, seed=0):
         size = X.shape[0]
         indices = numpy.random.permutation(size)
@@ -903,10 +1040,13 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         return indices_train, indices_test
     
     indices_train, indices_test = split_train_test(X, y, test_size=0.3)
+    
     X_train = X[indices_train, :]
     X_test = X[indices_test, :]
     y_train = y[indices_train]
     y_test = y[indices_test]
+    spike_times_train = spike_times_all[indices_train]
+    spike_times_test = spike_times_all[indices_test]
     
     if comm.rank == 0:
         print_and_log(["Start learning..."], level='debug', logger=logger)
@@ -1000,20 +1140,20 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     if comm.rank == 0:
         if make_plots not in ['None', '']:
-            # Plot prediction.
-            #title = "Initial prediction (ellipsoid)"
-            #plot_filename = "beer-prediction-init-ellipsoid.%s" %make_plots
-            #path = os.path.join(plot_path, plot_filename)
-            #plot.view_classification(clf, X, X_raw, y_raw, mode='predict',
-            #                         title=title, save=path)
+            # # Plot prediction.
+            # title = "Initial prediction (ellipsoid)"
+            # plot_filename = "beer-prediction-init-ellipsoid.%s" %make_plots
+            # path = os.path.join(plot_path, plot_filename)
+            # plot.view_classification(clf, X, X_raw, y_raw, mode='predict',
+            #                          title=title, save=path)
             
             pred_1 = clf.predict(X), clf.decision_function(X), X, X_raw, y_raw
-            # Plot decision function.
-            #title = "Initial decision function (ellipsoid)"
-            #plot_filename = "beer-decision-function-init-ellipsoid.%s" %make_plots
-            #path = os.path.join(plot_path, plot_filename)
-            #plot.view_classification(clf, X, X_raw, y_raw, mode='decision_function',
-            #                         title=title, save=path)
+            # # Plot decision function.
+            # title = "Initial decision function (ellipsoid)"
+            # plot_filename = "beer-decision-function-init-ellipsoid.%s" %make_plots
+            # path = os.path.join(plot_path, plot_filename)
+            # plot.view_classification(clf, X, X_raw, y_raw, mode='decision_function',
+            #                          title=title, save=path)
     
     if comm.rank == 0:
         if verbose:
@@ -1045,14 +1185,14 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     if comm.rank == 0:
         if make_plots not in ['None', '']:
-            # Plot final prediction.
-            #title = "Final prediction "
-            #plot_filename = "beer-prediction-final.%s" %make_plots
-            #path = os.path.join(plot_path, plot_filename)
-            #plot.view_classification(clf, X, X_raw, y_raw, mode='predict',
-            #                         title=title, save=path)
-            # Plot final decision function.
-            #title = "Final decision function"
+            # # Plot final prediction.
+            # title = "Final prediction "
+            # plot_filename = "beer-prediction-final.%s" %make_plots
+            # path = os.path.join(plot_path, plot_filename)
+            # plot.view_classification(clf, X, X_raw, y_raw, mode='predict',
+            #                          title=title, save=path)
+            # # Plot final decision function.
+            # title = "Final decision function"
             plot_filename = "beer-decision.%s" %make_plots
             pred_2 = clf.predict(X), clf.decision_function(X), X, X_raw, y_raw
             
@@ -1212,9 +1352,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 wclf.set_params(warm_start=True)
                 wclf.fit(X_train, y_train)
                 
-                
-                ##### TODO: fix depreciated zone
-                
                 # Compute the prediction on the test set.
                 y_pred = wclf.predict(X_test)
                 y_decf = wclf.decision_function(X_test)
@@ -1249,8 +1386,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         indices = comm.gather(loc_indices, root=0)
         y_preds_tmp = comm.gather(y_preds, root=0)
         y_decfs_tmp = comm.gather(y_decfs, root=0)
-        if test_method == 'full':
-            time_preds_tmp = comm.gather(time_preds, root=0)
         
         if comm.rank == 0:
             
@@ -1260,29 +1395,24 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             if group_name in beer_file.keys():
                 beer_file.pop(group_name)
             beer_file.create_group(group_name)
-            if test_method == 'full':
-                for indices_, loc_time_preds, loc_y_preds, loc_y_decfs in zip(indices, time_preds_tmp, y_preds_tmp, y_decfs_tmp):
-                    for index, time_pred, y_pred, y_decf in zip(indices_, loc_time_preds, loc_y_preds, loc_y_decfs):
-                        filename = "{}/time_pred_{}".format(group_name, index)
-                        beer_file.create_dataset(filename, data=time_pred)
-                        filename = "{}/y_pred_{}".format(group_name, index)
-                        beer_file.create_dataset(filename, data=y_pred)
-                        filename = "{}/y_decf_{}".format(group_name, index)
-                        beer_file.create_dataset(filename, data=y_decf)
-                        filename = "{}/temp_{}".format(group_name, index)
-                        mask = (y_pred == 0.0)
-                        temp = time_pred[mask]
-                        beer_file.create_dataset(filename, data=temp)
-            elif test_method == 'downsampled':
-                for indices_, loc_y_preds, loc_y_decfs in zip(indices, y_preds_tmp, y_decfs_tmp):
-                    for index, y_pred, y_decf in zip(indices_, loc_y_preds, loc_y_decfs):
-                        filename = "{}/y_pred_{}".format(group_name, index)
-                        beer_file.create_dataset(filename, data=y_pred)
-                        filename = "{}/y_decf_{}".format(group_name, index)
-                        beer_file.create_dataset(filename, data=y_decf)
+            for indices_, loc_y_preds, loc_y_decfs in zip(indices, y_preds_tmp, y_decfs_tmp):
+                for index, y_pred, y_decf in zip(indices_, loc_y_preds, loc_y_decfs):
+                    # Save predictions.
+                    filename = "{}/y_pred_{}".format(group_name, index)
+                    beer_file.create_dataset(filename, data=y_pred)
+                    # Save values of the decision function.
+                    filename = "{}/y_decf_{}".format(group_name, index)
+                    beer_file.create_dataset(filename, data=y_decf)
+                    # Save spike time predictions.
+                    filename = "{}/time_pred_{}".format(group_name, index)
+                    mask_y_pred = y_pred == 0.0
+                    spike_times_pred = spike_times_test[mask_y_pred]
+                    spike_times_pred = numpy.sort(spike_times_pred)
+                    beer_file.create_dataset(filename, data=spike_times_pred)
+                    # TODO: remove time_preds and save spike_times_test instead.
             beer_file.close()
-    
-    
+        
+        
         # Gather results on the root CPU.
         indices = comm.gather(loc_indices, root=0)
         confusion_matrices_tmp = comm.gather(confusion_matrices, root=0)
@@ -1323,24 +1453,15 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         
         # Retrieve results previously saved for weighted clustering.
         if comm.rank == 0:
-            if test_method == 'full':
-                y_preds_tmp = io.load_data(params, 'beer-preds')
-                y_decfs_tmp = io.load_data(params, 'beer-decfs')
-                print(y_preds_tmp.shape)
-                print(y_decfs_tmp.shape)
-                # TODO: find all the results we need to load...
-            elif test_method == 'downsampled':
-                y_preds_tmp = io.load_data(params, 'beer-preds')
-                y_decfs_tmp = io.load_data(params, 'beer-decfs')
-                # print(y_preds_tmp.shape)
-                # print(y_decfs_tmp.shape)
-                # print(y_preds_tmp)
-                # print(y_decfs_tmp)
-                # print(numpy.sum(y_preds_tmp, axis=1))
-                # print(numpy.sum(y_decfs_tmp, axis=1))
-                # TODO: find all the results we need to load...
-            else:
-                raise Exception("Unknown {} test method for BEER validation!".format(test_method))
+            y_preds_tmp = io.load_data(params, 'beer-preds')
+            y_decfs_tmp = io.load_data(params, 'beer-decfs')
+            # print(y_preds_tmp.shape)
+            # print(y_decfs_tmp.shape)
+            # print(y_preds_tmp)
+            # print(y_decfs_tmp)
+            # print(numpy.sum(y_preds_tmp, axis=1))
+            # print(numpy.sum(y_decfs_tmp, axis=1))
+            # TODO: find all the results we need to load...
     
     
     if comm.rank == 0:
@@ -1594,8 +1715,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     
     if comm.Get_rank() == 0:
         
-        ##### TODO: clean working zone
-        
         # Prepare data to be saved.
         selection = numpy.array(scerror['selection'], dtype=numpy.int)
         sc_contingency_matrices = scerror['contingency_matrices']
@@ -1620,7 +1739,6 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         beer_file.create_dataset(beer_key, data=sc_contingency_matrix)
         beer_file.close()
         
-        ##### end working zone
         
         if verbose:
             msg = [
@@ -1629,6 +1747,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 "# true positive rates: {}".format(tprs),
             ]
             print_and_log(msg, level='default', logger=logger)
+        
         
         if make_plots not in ['None', '']:
             # Plot the ROC curve of the BEER estimate.
@@ -1650,7 +1769,8 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 beer_file.pop('circus_error')
             beer_file.create_dataset('circus_error', data=numpy.array(error, dtype=numpy.float32))
             beer_file.close()  
-        
+    
+    
     
     ############################################################################
     

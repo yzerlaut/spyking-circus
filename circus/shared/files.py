@@ -63,7 +63,6 @@ def data_stats(params, show=True, export_times=False):
         return times
 
 
-
 def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False, all_labels=False, pos='neg', auto_align=True):
 
     data_file    = params.data_file
@@ -140,6 +139,15 @@ def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False
     data_file.close()
 
     return stas
+
+#####
+def get_extra_stas(params, times_i):
+    data_file = params.data_file
+    data_file.open()
+    N_t = params.getint('detection', 'N_t')
+    data_file.close()
+    return
+#####
 
 
 def get_stas_memshared(params, times_i, labels_i, src, neighs, nodes=None,
@@ -273,8 +281,6 @@ def get_stas_memshared(params, times_i, labels_i, src, neighs, nodes=None,
     data_file.close()
     
     return stas
-
-##### end working zone
 
 
 def get_artefact(params, times_i, tau, nodes, normalize=True):
