@@ -1047,6 +1047,20 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     y_test = y[indices_test]
     spike_times_train = spike_times_all[indices_train]
     spike_times_test = spike_times_all[indices_test]
+
+    
+    if comm.rank == 0:
+        
+        # Save spike times test into BEER file.
+        beer_path = "{}.beer.hdf5".format(file_out_suff)
+        beer_file = h5py.File(beer_path, 'a', libver='latest')
+        beer_key = 'spike_times_test'
+        if beer_key in beer_file.keys():
+            beer_file.pop(beer_key)
+        spike_times_test_ = numpy.sort(spike_times_test)
+        beer_file.create_dataset(beer_key, data=spike_times_test_)
+        beer_file.close()
+    
     
     if comm.rank == 0:
         print_and_log(["Start learning..."], level='debug', logger=logger)
