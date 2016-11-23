@@ -1068,16 +1068,32 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     #     y_test_bis = y_test
     #     chan_bis = 41
     #     class_weight_bis = get_class_weight_(y_train_bis)
+        
     #     beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
+        
     #     beer.fit(Z_train_bis, y_train_bis)
+        
     #     y_test_pred_bis = beer.predict(Z_test_bis)
-    #     print("y_test: {}".format(y_test_bis))
-    #     print("y_pred: {}".format(y_test_pred_bis))
-    #     print("#[y_test=1] / #[y_test]: {}".format(float(numpy.count_nonzero(y_test_bis == 1.0)) / float(len(y_test_bis))))
-    #     print("#[y_test_pred=1] / #[y_test_pred]: {}".format(float(numpy.count_nonzero(y_test_pred_bis == 1.0)) / float(len(y_test_pred_bis))))
+        
     #     # _ = beer.predict_plot(Z_test_bis)
+        
     #     # print("beer.score(Z_test_bis, y_test_bis): {}".format(beer.score(Z_test_bis, y_test_bis)))
-    #     _ = beer.score_plot(Z_test_bis, y_test_bis)
+        
+    #     # if make_plots not in ['None', '']:
+    #     #     plot_filename = "beer-score-plot.{}".format(make_plots)
+    #     #     path = os.path.join(plot_path, plot_filename)
+    #     # else:
+    #     #     path = None
+    #     # score_bis = beer.score_plot(Z_test_bis, y_test_bis, save=path)
+    #     # print("beer.score_plot(Z_test_bis, y_test_bis): {}".format(score_bis))
+        
+    #     class_weight_bis = get_class_weight_(y)
+    #     beer_pred = BEERPredictor(params, n_splits=5, shuffle=True, chan=chan_bis,
+    #                               n_iter=5, class_weight=class_weight_bis)
+    #     # y_pred_bis = beer_pred.predict(spike_times_all, y)
+    #     score_bis = beer_pred.score_plot(spike_times_all, y)
+    #     print("score_bis: {}".format(score_bis))
+    
     # sys.exit(0)
     #####
     
