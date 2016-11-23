@@ -64,7 +64,60 @@ def data_stats(params, show=True, export_times=False):
 
 
 def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False, all_labels=False, pos='neg', auto_align=True):
-
+    """Extract snippets from the extracellular traces
+    
+    Parameters
+    ----------
+    params : ...
+        SpyKING CIRCUS' parameters.
+    times_i : array_like
+        Spike times of shape (n_spike_times,).
+    labels_i : array-like
+        Labels of shape (n_spike_times,). If all_labels is True then the
+        extracted snippets are binned according to the values of their labels,
+        otherwise they are not taken into account.
+    src : int
+        Source channel used to align temporally the snippets.
+    neighs : array-like
+        Neighbors channels of shape (n_neighs,) used to select a subset of
+        nodes.
+    nodes : array-like [default None]
+        Nodes of shape (n_nodes,) used to get snippets only on valid electrodes.
+    mean_mode : bool [default False]
+        If all_labels is False and mean_mode is True then the extracted snippets
+        are binned in a unique bin, otherwise each snippet has its own bin.
+    all_labels : bool [default False]
+        If all_labels is True then the extracted snippets are binned according
+        to the values of their labels stored in labels_i.
+    pos : 'pos' or 'neg' [default 'neg']
+        If pos is 'pos' then the global maximum on channel src is used to align
+        temporally the snippets else if pos is 'neg then the global minimum is
+        used.
+    auto_align : bool [default True]
+        If auto_align is True then the snippets are temporally aligned else the
+        value of parameter alignement in section detection of the SpyKING
+        CIRCUS' parameter file is used.
+    
+    Returns
+    -------
+    stas : array-like
+        Snippets of shape
+         - (n_spike_times, n_neighs, w_template)
+           if all_labels is False and mean_mode is False
+         - (n_neighs, w_template)
+           if all_labels is False and mean_mode is True
+         - (n_labels, n_neighs, w_template)
+           if all_labels is True
+    
+    Notes
+    -----
+    1. The term "Spike Triggered Average" is inappropriate, we do not consider
+       stimulus but responses.
+    2. Check if there are some mistakes with src, neighs and nodes.
+    3. Transform labels_i into an optional argument (i.e. used only when
+       all_labels is True).
+    
+    """
     data_file    = params.data_file
     data_file.open()
     N_t          = params.getint('detection', 'N_t')
@@ -78,20 +131,20 @@ def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False
         stas      = numpy.zeros((len(nb_labels), len(neighs), N_t), dtype=numpy.float32)
 
     alignment     = params.getboolean('detection', 'alignment') and auto_align
-
+    
     do_temporal_whitening = params.getboolean('whitening', 'temporal')
     do_spatial_whitening  = params.getboolean('whitening', 'spatial')
     template_shift        = params.getint('detection', 'template_shift')
-
+    
     if do_spatial_whitening:
         spatial_whitening  = load_data(params, 'spatial_whitening')
     if do_temporal_whitening:     
         temporal_whitening = load_data(params, 'temporal_whitening')
-
+    
     if alignment:
         cdata = numpy.linspace(-template_shift, template_shift, 5*N_t)
         xdata = numpy.arange(-2*template_shift, 2*template_shift+1)
-
+    
     count = 0
     for lb, time in zip(labels_i, times_i):
         if alignment:
@@ -99,14 +152,16 @@ def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False
         else:
             local_chunk = data_file.get_snippet(time - template_shift, N_t, nodes=nodes)
         
+        # Whiten local chunk
         if do_spatial_whitening:
             local_chunk = numpy.dot(local_chunk, spatial_whitening)
         if do_temporal_whitening:
             local_chunk = scipy.ndimage.filters.convolve1d(local_chunk, temporal_whitening, axis=0, mode='constant')
-
+        
         local_chunk = numpy.take(local_chunk, neighs, axis=1)
-
+        
         if alignment:
+            # Align local chunk on the global minimum (or global maximum) in time of the source channel
             idx   = numpy.where(neighs == src)[0]
             ydata = numpy.arange(len(neighs))
             if len(ydata) == 1:
@@ -125,7 +180,7 @@ def get_stas(params, times_i, labels_i, src, neighs, nodes=None, mean_mode=False
                     rmin    = (numpy.argmax(f(cdata, idx)[:, 0]) - len(cdata)/2.)/5.
                 ddata       = numpy.linspace(rmin-template_shift, rmin+template_shift, N_t)
                 local_chunk = f(ddata, ydata).astype(numpy.float32)
-
+        
         if all_labels:
             lc        = numpy.where(nb_labels == lb)[0]
             stas[lc] += local_chunk.T

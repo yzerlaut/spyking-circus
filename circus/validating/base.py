@@ -27,6 +27,7 @@ from matplotlib.cm import inferno
 from matplotlib.patches import Rectangle
 
 from .utils import *
+from .beer import *
 
 
 
@@ -822,7 +823,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
             plot.view_datasets(params, xs, ys, [spike_times_gt, spike_times_ngt], colors=colors, labels=labels, save=path)
     
     
-    
+
     ##### INITIAL PARAMETER ####################################################
     
     if comm.rank == 0:
@@ -1047,7 +1048,39 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     y_test = y[indices_test]
     spike_times_train = spike_times_all[indices_train]
     spike_times_test = spike_times_all[indices_test]
-
+    
+    #####
+    # # TODO: remove test zone
+    # if comm.rank == 0:
+    #     def get_class_weight_(y):
+    #         n_samples = y.shape[0]
+    #         labels, y_inverse = numpy.unique(y, return_inverse=True)
+    #         n_labels = labels.shape[0]
+    #         counts = numpy.bincount(y_inverse)
+    #         class_weights = dict()
+    #         for label, count in zip(labels, counts):
+    #             class_weights[label] = float(n_samples) / float(n_labels * count)
+    #         return class_weights
+    #     print("Test BEER Classifier...")
+    #     Z_train_bis = spike_times_train
+    #     y_train_bis = y_train
+    #     Z_test_bis = spike_times_test
+    #     y_test_bis = y_test
+    #     chan_bis = 41
+    #     class_weight_bis = get_class_weight_(y_train_bis)
+    #     beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
+    #     beer.fit(Z_train_bis, y_train_bis)
+    #     y_test_pred_bis = beer.predict(Z_test_bis)
+    #     print("y_test: {}".format(y_test_bis))
+    #     print("y_pred: {}".format(y_test_pred_bis))
+    #     print("#[y_test=1] / #[y_test]: {}".format(float(numpy.count_nonzero(y_test_bis == 1.0)) / float(len(y_test_bis))))
+    #     print("#[y_test_pred=1] / #[y_test_pred]: {}".format(float(numpy.count_nonzero(y_test_pred_bis == 1.0)) / float(len(y_test_pred_bis))))
+    #     # _ = beer.predict_plot(Z_test_bis)
+    #     # print("beer.score(Z_test_bis, y_test_bis): {}".format(beer.score(Z_test_bis, y_test_bis)))
+    #     _ = beer.score_plot(Z_test_bis, y_test_bis)
+    # sys.exit(0)
+    #####
+    
     
     if comm.rank == 0:
         

@@ -35,7 +35,7 @@ class RawBinaryFile(DataFile):
         del self.data
 
     def read_chunk(self, idx, chunk_size, padding=(0, 0), nodes=None):
-    	
+        
         t_start, t_stop = self._get_t_start_t_stop(idx, chunk_size, padding)
         local_shape     = t_stop - t_start
 

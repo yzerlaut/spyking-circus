@@ -386,10 +386,15 @@ class DataFile(object):
 
 
     def _get_t_start_t_stop(self, idx, chunk_size, padding=(0,0)):
-
+        
         t_start     = idx*numpy.int64(chunk_size)+padding[0]
         t_stop      = (idx+1)*numpy.int64(chunk_size)+padding[1]
-
+        
+        #####
+        # # TODO: clean...
+        # print("t_stop: {}".format(t_stop))
+        # print("self.duration: {}".format(self.duration))
+        #####
         if t_stop > self.duration:
             t_stop = self.duration
 
