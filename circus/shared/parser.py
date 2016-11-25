@@ -64,6 +64,8 @@ class CircusParser(object):
                           ['validating', 'juxta_thresh', 'float', '6.0'],
                           ['validating', 'juxta_valley', 'bool', 'False'],
                           ['validating', 'matching_jitter', 'float', '2.0'],
+                          ['validating', 'make_learning_curve', 'bool', 'False'],
+                          ['validating', 'make_prediction', 'bool', 'False'],
                           ['noedits', 'median_done', 'bool', 'False'],
                           ['noedits', 'artefacts_done', 'bool', 'False']]
 
@@ -271,8 +273,15 @@ class CircusParser(object):
                 self.parser.set('converting', 'export_pcs', 's')
             elif self.parser.get('converting', 'export_pcs').lower() == 'all':
                 self.parser.set('converting', 'export_pcs', 'a')
-	    
 
+    def __copy__(self):
+        # For compatibility with scikit-learn
+        return self
+    
+    def __deepcopy__(self, memo):
+        # For compatibility with scikit-learn
+        return self
+    
     def get(self, section, data):
       	return self.parser.get(section, data)
 

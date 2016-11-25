@@ -1,5 +1,6 @@
 import h5py, logging
 import matplotlib.pyplot as plt
+import os
 from scipy import signal
 
 
@@ -1054,3 +1055,13 @@ def get_flag(params, flag_name):
     finally:
         beer_file.close()
     return flag_value
+
+def get_plot_path(params, filename, extension):
+    """TODO: complete...
+    
+    """
+    data_path = params.get('data', 'data_file_noext')
+    plot_directory = 'plots'
+    plot_filename = "{}.{}".format(filename, extension)
+    plot_path = os.path.join(data_path, plot_directory, plot_filename)
+    return plot_path

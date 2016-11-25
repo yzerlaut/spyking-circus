@@ -26,8 +26,9 @@ from sklearn.linear_model import SGDClassifier
 from matplotlib.cm import inferno
 from matplotlib.patches import Rectangle
 
-from .utils import *
-from .beer import *
+from circus.validating.utils import *
+from circus.validating.beer import *
+from circus.validating.plot import *
 
 
 
@@ -42,35 +43,33 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     N_t            = params.getint('detection', 'N_t')
     N_total        = params.nb_channels
     sampling_rate  = params.rate
-
-    template_shift     = params.getint('detection', 'template_shift')
-    file_out_suff      = params.get('data', 'file_out_suff')
-    nb_repeats         = params.getint('clustering', 'nb_repeats')
-    max_iter           = params.getint('validating', 'max_iter')
-    learning_rate_init = params.getfloat('validating', 'learning_rate')
-    make_plots         = params.get('validating', 'make_plots')
-    roc_sampling       = params.getint('validating', 'roc_sampling')
-    plot_path          = os.path.join(params.get('data', 'data_file_noext'), 'plots')
-    test_size          = params.getfloat('validating', 'test_size')
-    matching_jitter    = params.getfloat('validating', 'matching_jitter')
     
-    verbose   = False
-    skip_demo = False
+    template_shift      = params.getint('detection', 'template_shift')
+    file_out_suff       = params.get('data', 'file_out_suff')
+    nb_repeats          = params.getint('clustering', 'nb_repeats')
+    max_iter            = params.getint('validating', 'max_iter')
+    learning_rate_init  = params.getfloat('validating', 'learning_rate')
+    make_plots          = params.get('validating', 'make_plots')
+    roc_sampling        = params.getint('validating', 'roc_sampling')
+    plot_path           = os.path.join(params.get('data', 'data_file_noext'), 'plots')
+    test_size           = params.getfloat('validating', 'test_size')
+    matching_jitter     = params.getfloat('validating', 'matching_jitter')
+    make_learning_curve = params.getboolean('validating', 'make_learning_curve')
+    make_prediction     = params.getboolean('validating', 'make_prediction')
+    
+    verbose             = False
+    skip_demo           = False
     make_plots_snippets = False
     
-    # N_max = 1000000
     N_max = 12000
-    # N_max = 6000
-    # N_max = 3000
-    # N_max = 1500
     
     # Compute 'time_min' and 'time_max'.
-    
     time_min = template_shift
     time_max = (data_file.duration - 1) - template_shift
     
     # Initialize the random seed.
-    _ = numpy.random.seed(0)
+    seed = 32432
+    _ = numpy.random.seed(seed)
     
     
     
@@ -665,7 +664,13 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     spike_times_ngt = spike_times_extra[mask_ngt]
     ##### TODO: clean temporary zone
     # Select a subset of the spike times if they are too many.
-    max_spike_times_ngt = 10000
+    # max_spike_times_ngt = 10000
+    max_spike_times_ngt = 30000
+    #####
+    # TODO: clean...
+    print("max_spike_times_ngt: {}".format(max_spike_times_ngt))
+    print("spike_times_ngt.size: {}".format(spike_times_ngt.size))
+    #####
     if max_spike_times_ngt <= spike_times_ngt.size:
         if comm.Get_rank() == 0 and verbose:
             msg = [
@@ -1049,53 +1054,128 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     spike_times_train = spike_times_all[indices_train]
     spike_times_test = spike_times_all[indices_test]
     
-    #####
-    # # TODO: remove test zone
-    # if comm.rank == 0:
-    #     def get_class_weight_(y):
-    #         n_samples = y.shape[0]
-    #         labels, y_inverse = numpy.unique(y, return_inverse=True)
-    #         n_labels = labels.shape[0]
-    #         counts = numpy.bincount(y_inverse)
-    #         class_weights = dict()
-    #         for label, count in zip(labels, counts):
-    #             class_weights[label] = float(n_samples) / float(n_labels * count)
-    #         return class_weights
-    #     print("Test BEER Classifier...")
-    #     Z_train_bis = spike_times_train
-    #     y_train_bis = y_train
-    #     Z_test_bis = spike_times_test
-    #     y_test_bis = y_test
-    #     chan_bis = 41
-    #     class_weight_bis = get_class_weight_(y_train_bis)
+    if comm.rank == 0:
         
-    #     beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
+        def get_class_weight_(y, alpha=1.0):
+            """TODO: complete...
+            
+            Parameters
+            ----------
+            y : array-like
+                TODO: complete...
+            alpha : float or array-like [default 1.0]
+                Weight(s) ratio between class 0 and class 1.
+            """
+            if isinstance(alpha, (list, tuple, numpy.ndarray)):
+                class_weight = [get_class_weight_(y, alpha=a) for a in alpha]
+            else:
+                n_samples = y.shape[0]
+                labels, y_inverse = numpy.unique(y, return_inverse=True)
+                n_labels = labels.shape[0]
+                counts = numpy.bincount(y_inverse)
+                class_weight = dict()
+                for label, count in zip(labels, counts):
+                    if label == 0.0:
+                        class_weight[label] = float(n_samples) / ((1.0 + alpha ** -1.0) * float(count))
+                    elif label == 1.0:
+                        class_weight[label] = float(n_samples) / ((1.0 + alpha ** +1.0) * float(count))
+                    else:
+                        raise NotImplementedError()
+            return class_weight
+        print("Test BEER Classifier...")
+        Z_train_bis = spike_times_train
+        y_train_bis = y_train
+        Z_test_bis = spike_times_test
+        y_test_bis = y_test
+        chan_bis = 41
         
-    #     beer.fit(Z_train_bis, y_train_bis)
+        # class_weight_bis = get_class_weight_(y_train_bis)
+        # beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
         
-    #     y_test_pred_bis = beer.predict(Z_test_bis)
+        # beer.fit(Z_train_bis, y_train_bis)
         
-    #     # _ = beer.predict_plot(Z_test_bis)
+        # y_test_pred_bis = beer.predict(Z_test_bis)
         
-    #     # print("beer.score(Z_test_bis, y_test_bis): {}".format(beer.score(Z_test_bis, y_test_bis)))
+        # _ = beer.predict_plot(Z_test_bis)
         
-    #     # if make_plots not in ['None', '']:
-    #     #     plot_filename = "beer-score-plot.{}".format(make_plots)
-    #     #     path = os.path.join(plot_path, plot_filename)
-    #     # else:
-    #     #     path = None
-    #     # score_bis = beer.score_plot(Z_test_bis, y_test_bis, save=path)
-    #     # print("beer.score_plot(Z_test_bis, y_test_bis): {}".format(score_bis))
+        # print("beer.score(Z_test_bis, y_test_bis): {}".format(beer.score(Z_test_bis, y_test_bis)))
         
-    #     class_weight_bis = get_class_weight_(y)
-    #     beer_pred = BEERPredictor(params, n_splits=5, shuffle=True, chan=chan_bis,
-    #                               n_iter=5, class_weight=class_weight_bis)
-    #     # y_pred_bis = beer_pred.predict(spike_times_all, y)
-    #     score_bis = beer_pred.score_plot(spike_times_all, y)
-    #     print("score_bis: {}".format(score_bis))
+        # if make_plots not in ['None', '']:
+        #     plot_filename = "beer-score-plot.{}".format(make_plots)
+        #     path = os.path.join(plot_path, plot_filename)
+        # else:
+        #     path = None
+        # score_bis = beer.score_plot(Z_test_bis, y_test_bis, save=path)
+        # print("beer.score_plot(Z_test_bis, y_test_bis): {}".format(score_bis))
+        
+        if make_learning_curve:
+            # TODO: move import...
+            from sklearn.model_selection import learning_curve
+            # Make learning curve with BEER classifier
+            class_weight_bis = get_class_weight_(y)
+            beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
+            train_sizes = numpy.linspace(0.1, 1.0, num=10)
+            train_sizes, train_scores, test_scores = learning_curve(beer, spike_times_all, y,
+                                                                    cv=9, n_jobs=1, train_sizes=train_sizes)
+            # TODO: save learning curve into BEER file...
+            #  Make learning curve plot
+            if make_plots not in ['None', '']:
+                plot_path = get_plot_path(params, "beer-learning-curve", make_plots)
+                plot_learning_curve(train_sizes, train_scores, test_scores, save=plot_path)
+        
+        if make_prediction:
+            # Make prediction with BEER predictor
+            class_weight_bis = get_class_weight_(y, alpha=1.0)
+            beer_pred = BEERPredictor(params, n_splits=9, shuffle=True, chan=chan_bis,
+                                      n_iter=9, class_weight=class_weight_bis)
+            y_pred_bis = beer_pred.predict(spike_times_all, y)
+            # Save prediction into BEER file
+            mask_pred = y_pred_bis == 0.0
+            spike_times_pred = spike_times_all[mask_pred]
+            beer_file = get_beer_file(params, mode='a')
+            beer_key = "spike_times_pred"
+            if beer_key in beer_file.keys():
+                beer_file.pop(beer_key)
+            beer_file.create_dataset(beer_key, data=spike_times_pred)
+            beer_file.close()
+            # TODO: make confusion plot...
+        
+        sys.exit(0)
+        
+        coef = 3.0
+        # alphas = numpy.power(coef, numpy.linspace(-2.0, +2.0, 5))
+        # alphas = numpy.power(coef, numpy.linspace(-3.0, +3.0, 7))
+        coef = 1.1
+        alphas = numpy.power(coef, numpy.linspace(-3.0, +3.0, 7))
+        
+        conf_mats = len(alphas) * [None]
+        for index, alpha in enumerate(alphas):
+            print("alpha: {}".format(alpha))
+            class_weight_bis = get_class_weight_(y, alpha=alpha)
+            beer_pred = BEERPredictor(params, n_splits=3, shuffle=True, chan=chan_bis,
+                                      n_iter=9, class_weight=class_weight_bis)
+            # y_pred_bis = beer_pred.predict(spike_times_all, y)
+            # score_bis = beer_pred.score_plot(spike_times_all, y)
+            # print("score_bis: {}".format(score_bis))
+            conf_mats[index] = beer_pred.evaluate(spike_times_all, y)
+        
+        plt.figure()
+        plt.subplot(1, 1, 1, aspect='equal')
+        colors = ['k', 'b', 'r', 'g', 'y', 'c', 'm']
+        for conf_mat, color in zip(conf_mats, colors):
+            fpr = numpy.array([float(m[1, 0]) / float(numpy.sum(m[1, :])) for m in conf_mat])
+            fnr = numpy.array([float(m[0, 1]) / float(numpy.sum(m[0, :])) for m in conf_mat])
+            plt.plot(fpr, fnr, color)
+            plt.scatter(fpr, fnr, c=color, s=10)
+            plt.scatter(numpy.mean(fpr), numpy.mean(fnr), c=color, s=20)
+        plt.grid(True)
+        plt.xlim(0.0, 1.0)
+        plt.ylim(0.0, 1.0)
+        plt.xlabel("false positive rate")
+        plt.ylabel("false negative rate")
+        plt.show()
     
-    # sys.exit(0)
-    #####
+    sys.exit(0)
     
     
     if comm.rank == 0:

@@ -21,6 +21,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import SGDClassifier
 from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import KFold
 
 
@@ -45,30 +46,13 @@ class BEERClassifier(BaseEstimator, ClassifierMixin):
         
         """
         # Store SpyKING CIRCUS parameters
-        self.params_ = params
+        self.params = params
         # Store central channel parameter
-        self.chan_ = chan
+        self.chan = chan
         # Store number of passes parameter
-        self.n_iter_ = n_iter
+        self.n_iter = n_iter
         # Store class weights parameter
-        self.class_weight_ = class_weight
-        # Compute and store various internal parameters
-        self.nodes_, self.neighs_ = get_neighbors(self.params_, chan=self.chan_)
-        self.src_ = self.chan_ # TODO: correct value...
-        self.auto_align_ = False
-        self.poly_ = PolynomialFeatures(degree=2,
-                                        include_bias=False)
-        self.sgd_ = SGDClassifier(loss='log',
-                                  fit_intercept=True,
-                                  n_iter=self.n_iter_,
-                                  random_state=2,
-                                  learning_rate='optimal',
-                                  eta0=sys.float_info.epsilon,
-                                  class_weight=self.class_weight_,
-                                  warm_start=False)
-        self.n_linear_features_ = None
-        self.std_scl_ = StandardScaler()
-        self.pca_ = PCA(n_components=2)
+        self.class_weight = class_weight
     
     
     def fit(self, Z, y):
@@ -89,6 +73,24 @@ class BEERClassifier(BaseEstimator, ClassifierMixin):
             Current BEER classifier.
         
         """
+        # Compute and store various internal parameters
+        self.nodes_, self.neighs_ = get_neighbors(self.params, chan=self.chan)
+        self.src_ = self.chan # TODO: correct value...
+        self.auto_align_ = False
+        self.poly_ = PolynomialFeatures(degree=2,
+                                        include_bias=False)
+        self.sgd_ = SGDClassifier(loss='log',
+                                  fit_intercept=True,
+                                  n_iter=self.n_iter,
+                                  random_state=2,
+                                  learning_rate='optimal',
+                                  eta0=sys.float_info.epsilon,
+                                  class_weight=self.class_weight,
+                                  warm_start=False)
+        self.n_linear_features_ = None
+        self.std_scl_ = StandardScaler()
+        self.pca_ = PCA(n_components=2)
+        
         # Check that Z and y have correct shape
         assert(Z.ndim == 1)
         assert(y.ndim == 1)
@@ -196,46 +198,40 @@ class BEERClassifier(BaseEstimator, ClassifierMixin):
         X_ = self.get_linear_features_(X)
         X_ = self.std_scl_.transform(X_)
         X_ = self.pca_.transform(X_)
+        n_samples = X_.shape[0]
         s = 5
         lw = 0.1
         matplotlib.pyplot.figure()
-        #####
-        # # TODO: clean...
-        # mask_ = numpy.logical_and(y == 0.0, y_pred == 0.0)
-        # l_0_0 = matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='g', s=s, lw=lw)
-        # mask_ = numpy.logical_and(y == 0.0, y_pred == 1.0)
-        # l_0_1 = matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='y', s=s, lw=lw)
-        # mask_ = numpy.logical_and(y == 1.0, y_pred == 0.0)
-        # l_1_0 = matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='r', s=s, lw=lw)
-        # mask_ = numpy.logical_and(y == 1.0, y_pred == 1.0)
-        # l_1_1 = matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='b', s=s, lw=lw)
-        # matplotlib.pyplot.legend((l_0_0, l_0_1, l_1_0, l_1_1),
-        #                          ("hit", "miss", "false alarm", "correct rejection"))
-        # matplotlib.pyplot.xlabel("first principal component")
-        # matplotlib.pyplot.ylabel("second principal component")
-        #####
         ax = matplotlib.pyplot.subplot(2, 2, 1)
         mask_ = numpy.logical_and(y == 0.0, y_pred == 0.0)
         matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='g', s=s, lw=lw)
-        matplotlib.pyplot.title("Hits ({:.2f}%)".format(100.0 * float(numpy.sum(mask_)) / float(len(mask_))))
+        n_hits = numpy.sum(mask_)
+        p_hits = 100.0 * float(n_hits) / float(n_samples)
+        matplotlib.pyplot.title("{} hits ({:.2f}%)".format(n_hits, p_hits))
         matplotlib.pyplot.xlabel("first principal component")
         matplotlib.pyplot.ylabel("second principal component")
         matplotlib.pyplot.subplot(2, 2, 2, sharex=ax, sharey=ax)
         mask_ = numpy.logical_and(y == 0.0, y_pred == 1.0)
         matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='r', s=s, lw=lw)
-        matplotlib.pyplot.title("Misses ({:.2f}%)".format(100.0 * float(numpy.sum(mask_)) / float(len(mask_))))
+        n_misses = numpy.sum(mask_)
+        p_misses = 100.0 * float(n_misses) / float(n_samples)
+        matplotlib.pyplot.title("{} misses ({:.2f}%)".format(n_misses, p_misses))
         matplotlib.pyplot.xlabel("first principal component")
         matplotlib.pyplot.ylabel("second principal component")
         matplotlib.pyplot.subplot(2, 2, 3, sharex=ax, sharey=ax)
         mask_ = numpy.logical_and(y == 1.0, y_pred == 0.0)
         matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='r', s=s, lw=lw)
-        matplotlib.pyplot.title("False alarms ({:.2f}%)".format(100.0 * float(numpy.sum(mask_)) / float(len(mask_))))
+        n_false_alarms = numpy.sum(mask_)
+        p_false_alarms = 100.0 * float(n_false_alarms) / float(n_samples)
+        matplotlib.pyplot.title("{} false alarms ({:.2f}%)".format(n_false_alarms, p_false_alarms))
         matplotlib.pyplot.xlabel("first principal component")
         matplotlib.pyplot.ylabel("second principal component")
         matplotlib.pyplot.subplot(2, 2, 4, sharex=ax, sharey=ax)
         mask_ = numpy.logical_and(y == 1.0, y_pred == 1.0)
         matplotlib.pyplot.scatter(X_[mask_, 0], X_[mask_, 1], c='g', s=s, lw=lw)
-        matplotlib.pyplot.title("Correct rejections ({:.2f}%)".format(100.0 * float(numpy.sum(mask_)) / float(len(mask_))))
+        n_correct_rejections = numpy.sum(mask_)
+        p_correct_rejections = 100.0 * float(n_correct_rejections) / float(n_samples)
+        matplotlib.pyplot.title("{} correct rejections ({:.2f}%)".format(n_correct_rejections, p_correct_rejections))
         matplotlib.pyplot.xlabel("first principal component")
         matplotlib.pyplot.ylabel("second principal component")
         matplotlib.pyplot.tight_layout()
@@ -268,14 +264,14 @@ class BEERClassifier(BaseEstimator, ClassifierMixin):
         # Extract the snippets
         labels_i = numpy.zeros_like(Z) # TODO: modifiy 'get_stas_memshared' and 'get_stas' in order to be able remove 'labels_i'...
         if SHARED_MEMORY:
-            X = get_stas_memshared(self.params_, Z, labels_i, self.src_, self.neighs_,
+            X = get_stas_memshared(self.params, Z, labels_i, self.src_, self.neighs_,
                                    nodes=self.nodes_, auto_align=self.auto_align_)
         else:
-            X = get_stas(self.params_, Z, labels_i, self.src_, self.neighs_,
+            X = get_stas(self.params, Z, labels_i, self.src_, self.neighs_,
                          nodes=self.nodes_, auto_align=self.auto_align_)
         
         # Load the PCA basis
-        basis_proj, basis_rec = load_data(self.params_, 'basis')
+        basis_proj, basis_rec = load_data(self.params, 'basis')
         # Retrieve various sizes
         n_samples = X.shape[0]
         n_channels = X.shape[1]
@@ -344,37 +340,52 @@ class BEERPredictor(object):
         
         """
         # Store SpyKING CIRCUS parameters
-        self.params_ = params
+        self.params = params
         # Store number of folds
-        self.n_splits_ = n_splits
+        self.n_splits = n_splits
         # TODO: comment...
-        self.shuffle_ = shuffle
-        self.chan_ = chan
-        self.class_weight_ = class_weight
-        self.n_iter_ = n_iter
+        self.shuffle = shuffle
+        self.random_state_ = 22346 # TODO: correct...
+        self.chan = chan
+        self.class_weight = class_weight
+        self.n_iter = n_iter
         # Compute and store various internal parameters
-        self.kf_ = KFold(n_splits=self.n_splits_, shuffle=self.shuffle_)
+        self.kf_ = KFold(n_splits=self.n_splits,
+                         shuffle=self.shuffle,
+                         random_state=self.random_state_)
     
     
-    def predict(self, Z, y):
+    def predict(self, Z, y, mode='plain'):
         """TODO: complete...
         
+        mode: 'plain' of 'split'
+            TODO: complete...
+        
         """
+        # Check if mode is valid
+        assert(mode in ['plain', 'split'])
+        
         # Preallocation
-        y_pred = numpy.empty_like(y)
+        if mode is 'plain':
+            y_pred = numpy.empty_like(y)
+        elif mode is 'split':
+            y_pred = self.n_splits * [None]
         
         # For each fold
-        for train_index, test_index in self.kf_.split(Z):
+        for index, (train_index, test_index) in enumerate(self.kf_.split(Z)):
             Z_train = Z[train_index]
             Z_test = Z[test_index]
             y_train = y[train_index]
             y_test = y[test_index]
-            beer = BEERClassifier(self.params_,
-                                  chan=self.chan_,
-                                  n_iter=self.n_iter_,
-                                  class_weight=self.class_weight_)
+            beer = BEERClassifier(self.params,
+                                  chan=self.chan,
+                                  n_iter=self.n_iter,
+                                  class_weight=self.class_weight)
             beer.fit(Z_train, y_train)
-            y_pred[test_index] = beer.predict(Z_test)
+            if mode is 'plain':
+                y_pred[test_index] = beer.predict(Z_test)
+            elif mode is 'split':
+                y_pred[index] = beer.predict(Z_test)
         
         # Return predicted target values
         return y_pred
@@ -389,15 +400,20 @@ class BEERPredictor(object):
         
         # For each fold
         for train_index, test_index in self.kf_.split(Z):
+            # Retrieve the training data and labels from other folds
             Z_train = Z[train_index]
-            Z_test = Z[test_index]
             y_train = y[train_index]
+            # Retrieve the test data and labels from current fold
+            Z_test = Z[test_index]
             y_test = y[test_index]
-            beer = BEERClassifier(self.params_,
-                                  chan=self.chan_,
-                                  n_iter=self.n_iter_,
-                                  class_weight=self.class_weight_)
+            # Initialize a new BEER classifier
+            beer = BEERClassifier(self.params,
+                                  chan=self.chan,
+                                  n_iter=self.n_iter,
+                                  class_weight=self.class_weight)
+            # Fit BEER classifier on training data and labels
             beer.fit(Z_train, y_train)
+            # Store predicted target values on the test data
             y_pred[test_index] = beer.predict_plot(Z_test)
         
         # Return predicted target values
@@ -418,20 +434,53 @@ class BEERPredictor(object):
         
         """
         # Preallocation
-        scores = numpy.zeros(self.n_splits_)
+        scores = numpy.zeros(self.n_splits)
         
         # For each fold
         for index, (train_index, test_index) in enumerate(self.kf_.split(Z)):
+            # Retrieve the training data and labels from other folds
             Z_train = Z[train_index]
-            Z_test = Z[test_index]
             y_train = y[train_index]
+            # Retrieve the test data and labels from current fold
+            Z_test = Z[test_index]
             y_test = y[test_index]
-            beer = BEERClassifier(self.params_,
-                                  chan=self.chan_,
-                                  n_iter=self.n_iter_,
-                                  class_weight=self.class_weight_)
+            # Initialize a new BEER classifier
+            beer = BEERClassifier(self.params,
+                                  chan=self.chan,
+                                  n_iter=self.n_iter,
+                                  class_weight=self.class_weight)
+            # Fit BEER classifier on training data and labels
             beer.fit(Z_train, y_train)
+            # Store mean accuracy on the test data and labels
             scores[index] = beer.score_plot(Z_test, y_test)
         
-        # Return predicted target values
+        # Return mean accuracies
         return scores
+    
+    
+    def evaluate(self, Z, y):
+        """TODO: complete...
+        
+        """
+        # Preallocation
+        conf_mat = self.n_splits * [None]
+        y_pred = self.predict(Z, y, mode='split')
+        y = self.split_(y)
+        for index, (y_fold, y_pred_fold) in enumerate(zip(y, y_pred)):
+            conf_mat[index] = confusion_matrix(y_fold, y_pred_fold, labels=[0.0, 1.0])
+        return conf_mat
+    
+    
+    def split_(self, y):
+        """Split target values into folds
+        
+        TODO: complete...
+        
+        """
+        # Preallocation
+        y_ = self.n_splits * [None]
+        # For each fold
+        for index, (train_index, test_index) in enumerate(self.kf_.split(y)):
+            y_[index] = y[test_index]
+        # Return target values in folds
+        return y_
