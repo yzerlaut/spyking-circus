@@ -66,6 +66,7 @@ class CircusParser(object):
                           ['validating', 'matching_jitter', 'float', '2.0'],
                           ['validating', 'make_learning_curve', 'bool', 'False'],
                           ['validating', 'make_prediction', 'bool', 'False'],
+                          ['validating', 'class_weight_ratio', 'float', '1.0'],
                           ['noedits', 'median_done', 'bool', 'False'],
                           ['noedits', 'artefacts_done', 'bool', 'False']]
 

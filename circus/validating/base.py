@@ -56,6 +56,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     matching_jitter     = params.getfloat('validating', 'matching_jitter')
     make_learning_curve = params.getboolean('validating', 'make_learning_curve')
     make_prediction     = params.getboolean('validating', 'make_prediction')
+    class_weight_ratio  = params.getfloat('valdating', 'class_weight_ratio')
     
     verbose             = False
     skip_demo           = False
@@ -1123,7 +1124,8 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         
         if make_prediction:
             # Make prediction with BEER predictor
-            class_weight_bis = get_class_weight_(y, alpha=1.0)
+            alpha = class_weight_ratio
+            class_weight_bis = get_class_weight_(y, alpha=alpha)
             beer_pred = BEERPredictor(params, n_splits=9, shuffle=True, chan=chan_bis,
                                       n_iter=9, class_weight=class_weight_bis)
             y_pred_bis = beer_pred.predict(spike_times_all, y)
