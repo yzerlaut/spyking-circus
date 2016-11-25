@@ -56,7 +56,7 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
     matching_jitter     = params.getfloat('validating', 'matching_jitter')
     make_learning_curve = params.getboolean('validating', 'make_learning_curve')
     make_prediction     = params.getboolean('validating', 'make_prediction')
-    class_weight_ratio  = params.getfloat('valdating', 'class_weight_ratio')
+    class_weight_ratio  = params.getfloat('validating', 'class_weight_ratio')
     
     verbose             = False
     skip_demo           = False
