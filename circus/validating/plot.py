@@ -97,8 +97,8 @@ def plot_confusion(conf_mat, save=None):
     x = np.arange(0, n_splits)
     x = x + 1
     tnp = np.array([100.0 * float(cm[1, 1]) / float(np.sum(cm)) for cm in conf_mat])
-    fnp = np.array([100.0 * float(cm[0, 1]) / float(np.sum(cm)) for cm in conf_mat])
     fpp = np.array([100.0 * float(cm[1, 0]) / float(np.sum(cm)) for cm in conf_mat])
+    fnp = np.array([100.0 * float(cm[0, 1]) / float(np.sum(cm)) for cm in conf_mat])
     tpp = np.array([100.0 * float(cm[0, 0]) / float(np.sum(cm)) for cm in conf_mat])
     # Set plot parameters
     width = 1.0
@@ -109,9 +109,9 @@ def plot_confusion(conf_mat, save=None):
     plt.figure()
     plt.subplot(1, 1, 1)
     plt.bar(x, tnp, color='b', width=width, bottom=None, align=align, label="true negative")
-    plt.bar(x, fnp, color='r', width=width, bottom=tnp, align=align, label="false negative")
-    plt.bar(x, fpp, color='y', width=width, bottom=tnp + fnp, align=align, label="false positive")
-    plt.bar(x, tpp, color='g', width=width, bottom=tnp + fnp + fpp, align=align, label="true positive")
+    plt.bar(x, fpp, color='y', width=width, bottom=tnp, align=align, label="false positive")
+    plt.bar(x, fnp, color='r', width=width, bottom=tnp + fpp, align=align, label="false negative")
+    plt.bar(x, tpp, color='g', width=width, bottom=tnp + fpp + fnp, align=align, label="true positive")
     plt.xlim(xmin, xmax)
     plt.ylim(0.0, 100.0)
     plt.xlabel("split")
