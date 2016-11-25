@@ -16,14 +16,15 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import euclidean_distances
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.linear_model import SGDClassifier
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import KFold
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import KFold, learning_curve
 
+
+
+train_sizes_ = numpy.array([0.1, 0.33, 0.55, 0.78, 1.0])
 
 
 class BEERClassifier(BaseEstimator, ClassifierMixin):
@@ -311,15 +312,27 @@ class BEERClassifier(BaseEstimator, ClassifierMixin):
         return X
     
     
-    def fit_(self):
-        """Fit the neural network
+    def learning_curve(self, Z, y, train_sizes=train_sizes_, cv=None):
+        """Learning curve
+        
+        Parameters
+        ----------
+        Z : array-like
+        y : array-like
+        train_sizes : array_like [default [0.1, 0.33, 0.55, 0.78, 1.0]]
+        cv : None or int
         
         Returns
         -------
-        clf : circus.validating.BEERClassifier
-            Current BEER classifier.
+        train_sizes : array-like
+        train_scores : array-like
+        test_scores : array-like
+        
+        TODO: complete...
+        
         """
-        return self
+        train_sizes, train_scores, test_scores = learning_curve(self, Z, y, train_sizes=train_sizes, cv=9)
+        return train_sizes, train_scores, test_scores
 
 
 

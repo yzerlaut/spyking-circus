@@ -5,6 +5,24 @@ import numpy as np
 
 
 
+def finalize(save):
+    """Finalize plot
+    
+    Parameters
+    ----------
+    save : None or str
+        If equal to None then show plot. If is a string containing a path to a
+        filename then save plot to this location and close it.
+    
+    """
+    if save is None:
+        plt.show()
+    else:
+        plt.savefig(save)
+        plt.close()
+    return
+
+
 def plot_learning_curve(train_sizes, train_scores, test_scores, save=None):
     """Make a learning curve plot
     
@@ -57,11 +75,48 @@ def plot_learning_curve(train_sizes, train_scores, test_scores, save=None):
     plt.xlabel("number of training samples")
     plt.ylabel("score")
     plt.legend(handles=[train_patch, test_patch], loc="best")
-    # Show or save plot
-    if save is None:
-        plt.show()
-    else:
-        plt.savefig(save)
-        plt.close()
+    # Finalize plot
+    finalize(save)
     # Return
+    return
+
+
+def plot_confusion(conf_mat, save=None):
+    """Make confusion plot
+    
+    Parameters
+    ----------
+    conf_mat : list of array-like
+        List of confusion matrices, one for each cross-validation split.
+    save : None or string [default None]
+        If not equal to None, a string containing a path to a filename in which
+        the figure will be saved.
+    
+    """
+    n_splits = len(conf_mat)
+    x = np.arange(0, n_splits)
+    x = x + 1
+    tnp = np.array([float(cm[1, 1]) / float(np.sum(cm)) for cm in conf_mat])
+    fnp = np.array([float(cm[0, 1]) / float(np.sum(cm)) for cm in conf_mat])
+    fpp = np.array([float(cm[1, 0]) / float(np.sum(cm)) for cm in conf_mat])
+    tpp = np.array([float(cm[0, 0]) / float(np.sum(cm)) for cm in conf_mat])
+    # Set plot parameters
+    width = 1.0
+    align = 'center'
+    xmin = 0.5
+    xmax = float(n_splits) + 0.5
+    # Make plot
+    plt.figure()
+    plt.subplot(1, 1, 1)
+    plt.bar(x, tnp, color='b', width=width, bottom=None, align=align, label="true negative")
+    plt.bar(x, fnp, color='r', width=width, bottom=tnp, align=align, label="false negative")
+    plt.bar(x, fpp, color='y', width=width, bottom=tnp + fnp, align=align, label="false positive")
+    plt.bar(x, tpp, color='g', width=width, bottom=tnp + fnp + fpp, align=align, label="true positive")
+    plt.xlim(xmin, xmax)
+    plt.ylim(0.0, 1.0)
+    plt.xlabel("split")
+    plt.ylabel("proportion")
+    plt.legend(loc="best")
+    # Finalize plot
+    finalize(save)
     return

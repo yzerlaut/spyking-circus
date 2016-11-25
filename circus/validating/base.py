@@ -1109,14 +1109,12 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
         # print("beer.score_plot(Z_test_bis, y_test_bis): {}".format(score_bis))
         
         if make_learning_curve:
-            # TODO: move import...
-            from sklearn.model_selection import learning_curve
             # Make learning curve with BEER classifier
             class_weight_bis = get_class_weight_(y)
             beer = BEERClassifier(params, chan=chan_bis, class_weight=class_weight_bis)
             train_sizes = numpy.linspace(0.1, 1.0, num=10)
-            train_sizes, train_scores, test_scores = learning_curve(beer, spike_times_all, y,
-                                                                    cv=9, n_jobs=1, train_sizes=train_sizes)
+            train_sizes, train_scores, test_scores = beer.learning_curve(spike_times_all, y,
+                                                                         train_sizes=train_sizes, cv=9)
             # TODO: save learning curve into BEER file...
             #  Make learning curve plot
             if make_plots not in ['None', '']:
@@ -1138,7 +1136,11 @@ def main(params, nb_cpu, nb_gpu, us_gpu):
                 beer_file.pop(beer_key)
             beer_file.create_dataset(beer_key, data=spike_times_pred)
             beer_file.close()
-            # TODO: make confusion plot...
+            # Make confusion plot
+            if make_plots not in ['None', '']:
+                conf_mat = beer_pred.evaluate(spike_times_all, y)
+                plot_path = get_plot_path(params, "beer-confusion", make_plots)
+                plot_confusion(conf_mat, save=plot_path)
         
         sys.exit(0)
         
