@@ -15,7 +15,7 @@ from os.path import join as pjoin
 import colorama
 colorama.init(autoreset=True)
 from colorama import Fore, Back, Style
-from circus.shared.files import data_stats 
+from circus.shared.files import data_stats
 from circus.shared.messages import print_error, print_info, print_and_log, get_colored_header, init_logging
 from circus.shared.mpi import SHARED_MEMORY, comm, gather_mpi_arguments
 from circus.shared.parser import CircusParser
@@ -29,7 +29,7 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
 
-    
+
     parallel_hdf5 = h5py.get_config().mpi
     user_path     = pjoin(os.path.expanduser('~'), 'spyking-circus')
     tasks_list    = None
@@ -61,7 +61,7 @@ def main(argv=None):
     header += Fore.GREEN + "##################################################################"
     header += Fore.RESET
 
-    method_help = '''by default, first 4 steps are performed, 
+    method_help = '''by default, first 4 steps are performed,
 but a subset x,y can be done. Steps are:
  - filtering
  - whitening
@@ -96,7 +96,7 @@ but a subset x,y can be done. Steps are:
     parser.add_argument('-o', '--output', help='output file [for generation of synthetic benchmarks]')
     parser.add_argument('-t', '--type', help='benchmark type',
                         choices=['fitting', 'clustering', 'synchrony'])
-    
+
     if len(argv) == 0:
         parser.print_help()
         sys.exit(0)
@@ -117,7 +117,7 @@ but a subset x,y can be done. Steps are:
 
     f_next, extens = os.path.splitext(filename)
 
-    if info:    
+    if info:
         if args.datafile.lower() in __supported_data_files__:
             filename = 'tmp'
             if len(__supported_data_files__[args.datafile.lower()].extension) > 0:
@@ -137,7 +137,7 @@ but a subset x,y can be done. Steps are:
     if not os.path.exists(file_params) and not batch:
         print Fore.RED + 'The parameter file %s is not present!' %file_params
         create_params = query_yes_no(Fore.WHITE + "Do you want SpyKING CIRCUS to create a parameter file?")
-        
+
         if create_params:
             print Fore.WHITE + "Creating", file_params
             print Fore.WHITE + "Fill it properly before launching the code! (see documentation)"
@@ -155,6 +155,7 @@ but a subset x,y can be done. Steps are:
         logger       = init_logging(logfile)
         params       = CircusParser(filename)
         data_file    = params.get_data_file(source=True, has_been_created=False)
+
         overwrite    = params.getboolean('data', 'overwrite')
         file_format  = params.get('data', 'file_format')
         if overwrite:
@@ -200,9 +201,10 @@ but a subset x,y can be done. Steps are:
         description['data_dtype']   = 'float32'
         description['dtype_offset'] = 0
         description['data_offset']  = 0
+        description['gain'] = 1.0
         new_params    = CircusParser(filename)
         data_file_out = new_params.get_data_file(is_empty=True, params=description)
-        
+
         support_parallel_write = data_file_out.parallel_write
         is_writable            = data_file_out.is_writable
         data_file_out.allocate(shape=local_chunk.shape, data_dtype=numpy.float32)
@@ -241,7 +243,7 @@ but a subset x,y can be done. Steps are:
         print Fore.GREEN + "Hostfile      :", Fore.CYAN + hostfile
         print ""
         print Fore.GREEN + "##################################################################"
-        print ""        
+        print ""
         print Fore.RESET
 
         # Launch the subtasks
@@ -270,6 +272,7 @@ but a subset x,y can be done. Steps are:
             params = new_params
             params.data_file._params = tmp_params
 
+
         if nb_cpu < psutil.cpu_count():
             if use_gpu != 'True' and not result:
                 print_and_log(['Using only %d out of %d local CPUs available (-c to change)' %(nb_cpu, psutil.cpu_count())], 'info', logger)
@@ -282,7 +285,7 @@ but a subset x,y can be done. Steps are:
 
         n_edges = get_averaged_n_edges(params)
         if n_edges > 100 and not params.getboolean('clustering', 'compress'):
-            print_and_log(['Template compression is highly recommended based on parameters'], 'info', logger)    
+            print_and_log(['Template compression is highly recommended based on parameters'], 'info', logger)
 
         if params.getint('data', 'N_e') > 500:
             if params.getint('data', 'chunk_size') > 10:
@@ -312,7 +315,7 @@ but a subset x,y can be done. Steps are:
                                                'However, note that if you have streams, informations on times',
                                                'will be discarded'], 'info', logger)
                                 sys.exit(0)
-                        
+
                         if subtask in ['filtering'] and not support_parallel_write and (args.cpu > 1):
                             print_and_log(['No parallel writes for %s: only 1 node used for %s' %(file_format, subtask)], 'info', logger)
                             nb_tasks = str(1)
@@ -355,7 +358,7 @@ but a subset x,y can be done. Steps are:
         from circus.shared import gui
         import pylab
         from matplotlib.backends import qt_compat
-        
+
         use_pyside = qt_compat.QT_API == qt_compat.QT_API_PYSIDE
         if use_pyside:
             from PySide import QtGui, QtCore, uic
