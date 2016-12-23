@@ -86,9 +86,14 @@ class RawMCSFile(RawBinaryFile):
         elif header['dtype_offset'] == 0:
              header['data_dtype'] = 'int16'
 
+        if header['has_digital']:
+            nb_channels = header['nb_channels'] + 1
+        else:
+            nb_channels = header['nb_channels']
+
         self.data   = numpy.memmap(self.file_name, offset=header['data_offset'], dtype=header['data_dtype'], mode='r')
         self.size   = len(self.data)
-        self._shape = (self.size//header['nb_channels'], header['nb_channels'])
+        self._shape = (self.size // nb_channels, nb_channels)
         self.has_digital = header['has_digital']
         del self.data
 
@@ -123,26 +128,11 @@ class RawMCSFile(RawBinaryFile):
             if self.has_digital:
                 nodes = numpy.arange(1, nb_channels)
                 local_chunk = numpy.take(local_chunk, nodes, axis=1)
-                # # TODO clean...
-                # print(">>>>>")
-                # print("nodes.shape: {}".format(nodes.shape))
-                # print("local_chunk.shape: {}".format(local_chunk.shape))
-                # print("local_chunk: {}".format(local_chunk))
-                # print("<<<<<")
             else:
                 pass
 
         # Scale and cast local chunk
         scaled_casted_local_chunk = self._scale_data_to_float32(local_chunk)
-        # # TODO clean...
-        # print(">>>>>")
-        # print(scaled_casted_local_chunk)
-        # import matplotlib.pyplot as plt
-        # for i in range(0, 10):
-        #     plt.plot(scaled_casted_local_chunk[:, i] + float(50 * i))
-        # plt.show()
-        # exit()
-        # print("<<<<<")
 
         # Return scaled and casted local chunk
         return scaled_casted_local_chunk
