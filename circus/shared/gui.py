@@ -1189,7 +1189,7 @@ class PreviewGUI(QtGui.QMainWindow):
                         tmp2   = self.templates[:, elec+self.templates.shape[1]//2].toarray().reshape(self.N_e, self.N_t)
                         self.curve[:, spike-self.template_shift:spike+self.template_shift+1] += amp1*tmp1 + amp2*tmp2
             except Exception:
-                self.curve     = numpy.zeros((self.N_e, self.sampling_rate), dtype=numpy.float32)
+                self.curve     = numpy.zeros((int(self.N_e), int(self.sampling_rate)), dtype=numpy.float32)
 
 
             if self.has_garbage:
