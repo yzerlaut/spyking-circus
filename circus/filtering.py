@@ -73,7 +73,8 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
         for count, gidx in enumerate(to_explore):
 
             local_chunk, t_offset =  data_file_in.get_data(gidx, chunk_size)
-
+            local_chunk = np.array(local_chunk).copy() # because otherwise: ValueError: output array is read-only
+            
             if do_filtering:
                 for i in nodes:    
                     try:           
